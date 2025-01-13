@@ -28,7 +28,7 @@ function App() {
                 <NavLink to='/' className='flex items-center text-primary'>
                   <Image
                     className='w-18 h-10'
-                    src='./src/assets/deen-akademie-logo.png'
+                    src='/images/logo.png'
                     alt='Logo'
                   />
                   <span className='font-bold text-lg hidden sm:block '>
