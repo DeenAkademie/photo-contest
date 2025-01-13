@@ -14,6 +14,7 @@ import { Toaster } from './ui/toaster';
 import { Progress } from './ui/progress';
 import { Dialog, DialogContent } from './ui/dialog';
 import PropTypes from 'prop-types';
+import FingerprintJS from '@fingerprintjs/fingerprintjs';
 
 function Gallery({ supabase }) {
   const [photos, setPhotos] = useState([]);
@@ -51,15 +52,20 @@ function Gallery({ supabase }) {
     }
   }, [supabase, toast]);
 
+  const getVisitorId = useCallback(async () => {
+    const fp = await FingerprintJS.load();
+    const result = await fp.get();
+    return result.visitorId;
+  }, []);
+
   const checkVoteStatus = useCallback(async () => {
     try {
-      const response = await fetch('https://api.ipify.org?format=json');
-      const { ip } = await response.json();
+      const visitorId = await getVisitorId();
 
       const { data, error } = await supabase
         .from('votes')
         .select('photo_id')
-        .eq('ip_address', ip)
+        .eq('visitor_id', visitorId)
         .single();
 
       if (error && error.code !== 'PGRST116') {
@@ -71,13 +77,12 @@ function Gallery({ supabase }) {
     } catch (error) {
       console.error('Error checking vote status:', error);
     }
-  }, [supabase]);
+  }, [supabase, getVisitorId]);
 
   const handleVote = async (photoId) => {
     try {
       setUploading(true);
-      const response = await fetch('https://api.ipify.org?format=json');
-      const { ip } = await response.json();
+      const visitorId = await getVisitorId();
 
       if (hasVoted) {
         if (votedPhotoId) {
@@ -94,7 +99,7 @@ function Gallery({ supabase }) {
         const { error: deleteError } = await supabase
           .from('votes')
           .delete()
-          .eq('ip_address', ip);
+          .eq('visitor_id', visitorId);
 
         if (deleteError) throw deleteError;
       }
@@ -102,7 +107,7 @@ function Gallery({ supabase }) {
       const { error: voteError } = await supabase.from('votes').insert([
         {
           photo_id: photoId,
-          ip_address: ip,
+          visitor_id: visitorId,
         },
       ]);
 
