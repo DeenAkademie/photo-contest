@@ -1,86 +1,46 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FaCloudUploadAlt } from 'react-icons/fa';
-import { Button } from "./ui/button";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "./ui/card";
-import { Input } from "./ui/input";
-import { Label } from "./ui/label";
-import { useToast } from "./ui/use-toast";
-import { Toaster } from "./ui/toaster";
+import PropTypes from 'prop-types';
+import { Button } from './ui/button';
+import { Input } from './ui/input';
+import { Label } from './ui/label';
+import { useToast } from './ui/use-toast';
+import { Toaster } from './ui/toaster';
+import { Progress } from './ui/progress';
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from './ui/card';
 
-function Upload({ supabase, onSuccess }) {
-  const [formData, setFormData] = useState({
-    firstName: '',
-    lastName: '',
-    email: '',
-  });
-  const [file, setFile] = useState(null);
+function Upload({ supabase }) {
   const [uploading, setUploading] = useState(false);
+  const [progress, setProgress] = useState(0);
   const [preview, setPreview] = useState(null);
   const navigate = useNavigate();
   const { toast } = useToast();
 
-  const handleInputChange = (e) => {
-    const { name, value } = e.target;
-    setFormData(prev => ({
-      ...prev,
-      [name]: value
-    }));
-  };
-
-  const handleFileChange = (e) => {
-    const selectedFile = e.target.files[0];
-    if (selectedFile) {
-      // Überprüfe die Dateigröße (10MB Limit)
-      if (selectedFile.size > 10 * 1024 * 1024) {
-        toast({
-          variant: "destructive",
-          title: "Datei zu groß",
-          description: "Die maximale Dateigröße beträgt 10MB"
-        });
-        return;
-      }
-
-      // Überprüfe den Dateityp
-      const validTypes = ['image/jpeg', 'image/png', 'image/gif'];
-      if (!validTypes.includes(selectedFile.type)) {
-        toast({
-          variant: "destructive",
-          title: "Ungültiges Dateiformat",
-          description: "Bitte nur JPG, PNG oder GIF Dateien hochladen"
-        });
-        return;
-      }
-
-      setFile(selectedFile);
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setPreview(reader.result);
-      };
-      reader.readAsDataURL(selectedFile);
+  const handleFileChange = (event) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      setPreview(URL.createObjectURL(file));
     }
   };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    
-    if (!file || !formData.firstName.trim() || 
-        !formData.lastName.trim() || !formData.email.trim()) {
-      toast({
-        variant: "destructive",
-        title: "Fehlende Angaben",
-        description: "Bitte füllen Sie alle Felder aus"
-      });
-      return;
-    }
+  const handleSubmit = async (event) => {
+    event.preventDefault();
+    const formData = new FormData(event.target);
+    const accountName = formData.get('accountName');
+    const photo = formData.get('photo');
 
-    // Validiere E-Mail-Format
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(formData.email)) {
+    if (!accountName || !photo) {
       toast({
-        variant: "destructive",
-        title: "Ungültige E-Mail",
-        description: "Bitte geben Sie eine gültige E-Mail-Adresse ein"
+        variant: 'destructive',
+        title: 'Fehler',
+        description: 'Bitte füllen Sie alle Felder aus',
       });
       return;
     }
@@ -88,200 +48,154 @@ function Upload({ supabase, onSuccess }) {
     try {
       setUploading(true);
 
-      // Generiere einen einzigartigen Dateinamen
-      const fileExt = file.name.split('.').pop();
+      const fileExt = photo.name.split('.').pop();
       const fileName = `${Math.random()}.${fileExt}`;
-      const filePath = `${fileName}`;
-
-      // Lade das Bild in den Storage hoch
       const { error: uploadError } = await supabase.storage
         .from('photos')
-        .upload(filePath, file);
+        .upload(fileName, photo, {
+          onUploadProgress: (progress) => {
+            setProgress(Math.round((progress.loaded / progress.total) * 100));
+          },
+        });
 
       if (uploadError) throw uploadError;
 
-      // Hole die öffentliche URL des hochgeladenen Bildes
-      const { data: { publicUrl } } = supabase.storage
-        .from('photos')
-        .getPublicUrl(filePath);
+      const {
+        data: { publicUrl },
+      } = supabase.storage.from('photos').getPublicUrl(fileName);
 
-      // Speichere die Bildinformationen in der Datenbank
-      const { error: dbError } = await supabase
-        .from('photos')
-        .insert([
-          {
-            first_name: formData.firstName.trim(),
-            last_name: formData.lastName.trim(),
-            email: formData.email.trim(),
-            image_url: publicUrl,
-            votes: 0
-          }
-        ]);
+      const { error: dbError } = await supabase.from('photos').insert([
+        {
+          account_name: accountName,
+          image_url: publicUrl,
+          votes: 0,
+        },
+      ]);
 
       if (dbError) throw dbError;
 
       toast({
-        title: "Erfolgreich hochgeladen",
-        description: "Ihr Foto wurde erfolgreich zum Wettbewerb hinzugefügt"
+        title: 'Erfolgreich hochgeladen',
+        description: 'Ihr Foto wurde erfolgreich hochgeladen',
       });
-      
-      // Wenn onSuccess existiert (Admin-Bereich), rufe es auf
-      if (onSuccess) {
-        onSuccess();
-      } else {
-        // Andernfalls leite zur Galerie weiter
-        setTimeout(() => {
-          navigate('/');
-        }, 2000);
-      }
 
+      navigate('/');
     } catch (error) {
+      console.error('Error:', error);
       toast({
-        variant: "destructive",
-        title: "Upload fehlgeschlagen",
-        description: error.message
+        variant: 'destructive',
+        title: 'Fehler',
+        description: 'Foto konnte nicht hochgeladen werden',
       });
     } finally {
       setUploading(false);
+      setProgress(0);
     }
   };
 
   return (
-    <div className="container mx-auto py-8 px-4">
-      <div className="max-w-2xl mx-auto">
+    <div className='container max-w-xl mx-auto p-4'>
+      <form onSubmit={handleSubmit} className='space-y-6'>
         <Card>
           <CardHeader>
             <CardTitle>Foto hochladen</CardTitle>
             <CardDescription>
-              Laden Sie Ihr Foto für den Wettbewerb hoch
+              Laden ein Foto für den Wettbewerb hoch.
             </CardDescription>
           </CardHeader>
-          <CardContent>
-            <form onSubmit={handleSubmit} className="space-y-6">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="firstName">Vorname</Label>
-                  <Input
-                    id="firstName"
-                    name="firstName"
-                    type="text"
-                    value={formData.firstName}
-                    onChange={handleInputChange}
-                    placeholder="Vorname"
-                    required
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="lastName">Nachname</Label>
-                  <Input
-                    id="lastName"
-                    name="lastName"
-                    type="text"
-                    value={formData.lastName}
-                    onChange={handleInputChange}
-                    placeholder="Nachname"
-                    required
-                  />
-                </div>
-              </div>
+          <CardContent className='space-y-6'>
+            <div className='space-y-2'>
+              <Label htmlFor='accountName'>Profilname</Label>
+              <Input
+                id='accountName'
+                name='accountName'
+                type='text'
+                required
+                disabled={uploading}
+                placeholder='Profilname des Bildbesitzers'
+              />
+            </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="email">E-Mail</Label>
-                <Input
-                  id="email"
-                  name="email"
-                  type="email"
-                  value={formData.email}
-                  onChange={handleInputChange}
-                  placeholder="ihre@email.de"
-                  required
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="photo">Foto</Label>
-                <div className="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-dashed rounded-lg border-muted hover:border-primary transition-colors duration-300">
-                  <div className="space-y-1 text-center">
-                    {preview ? (
-                      <div className="relative max-w-xs mx-auto">
-                        <img 
-                          src={preview} 
-                          alt="Vorschau" 
-                          className="max-h-48 rounded-lg"
+            <div className='space-y-2'>
+              <Label htmlFor='photo'>Foto</Label>
+              <div className='grid w-full items-center gap-4'>
+                <div className='flex flex-col items-center justify-center space-y-4 p-6 border-2 border-dashed rounded-lg'>
+                  {preview ? (
+                    <div className='space-y-4 w-full'>
+                      <img
+                        src={preview}
+                        alt='Vorschau'
+                        className='mx-auto max-h-64 object-contain'
+                      />
+                      <p className='text-sm text-center text-muted-foreground'>
+                        Klicken Sie unten, um ein anderes Foto auszuwählen
+                      </p>
+                    </div>
+                  ) : (
+                    <div className='flex flex-col items-center space-y-4'>
+                      <svg
+                        className='h-12 w-12 text-muted-foreground'
+                        xmlns='http://www.w3.org/2000/svg'
+                        fill='none'
+                        viewBox='0 0 24 24'
+                        stroke='currentColor'
+                      >
+                        <path
+                          strokeLinecap='round'
+                          strokeLinejoin='round'
+                          strokeWidth={2}
+                          d='M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z'
                         />
-                        <Button
-                          type="button"
-                          variant="destructive"
-                          size="sm"
-                          className="absolute top-0 right-0 -mt-2 -mr-2"
-                          onClick={() => {
-                            setFile(null);
-                            setPreview(null);
-                          }}
-                        >
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
-                          </svg>
-                        </Button>
-                      </div>
-                    ) : (
-                      <>
-                        <FaCloudUploadAlt className="mx-auto h-12 w-12 text-muted-foreground" />
-                        <div className="flex text-sm text-muted-foreground">
-                          <label
-                            htmlFor="file-upload"
-                            className="relative cursor-pointer rounded-md font-medium text-primary hover:text-primary/80 focus-within:outline-none"
-                          >
-                            <span>Foto auswählen</span>
-                            <input
-                              id="file-upload"
-                              name="file-upload"
-                              type="file"
-                              accept="image/*"
-                              onChange={handleFileChange}
-                              className="sr-only"
-                              required
-                            />
-                          </label>
-                          <p className="pl-1">oder hierher ziehen</p>
-                        </div>
-                        <p className="text-xs text-muted-foreground">
-                          PNG, JPG, GIF bis zu 10MB
-                        </p>
-                      </>
-                    )}
-                  </div>
+                      </svg>
+                      <p className='text-muted-foreground'>
+                        Wählen Sie ein Foto aus
+                      </p>
+                    </div>
+                  )}
+                  <Input
+                    id='photo'
+                    name='photo'
+                    type='file'
+                    accept='image/*'
+                    required
+                    disabled={uploading}
+                    onChange={handleFileChange}
+                    className='max-w-xs'
+                  />
                 </div>
               </div>
+            </div>
 
-              <CardFooter className="flex justify-end space-x-4 px-0">
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => navigate('/')}
-                >
-                  Abbrechen
-                </Button>
-                <Button
-                  type="submit"
-                  disabled={uploading}
-                >
-                  {uploading && (
-                    <svg className="mr-2 h-4 w-4 animate-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                    </svg>
-                  )}
-                  {uploading ? 'Wird hochgeladen...' : 'Hochladen'}
-                </Button>
-              </CardFooter>
-            </form>
+            {uploading && (
+              <div className='space-y-2'>
+                <Progress value={progress} className='w-full' />
+                <p className='text-sm text-muted-foreground text-center'>
+                  {progress}% hochgeladen...
+                </p>
+              </div>
+            )}
           </CardContent>
+          <CardFooter>
+            <Button
+              type='submit'
+              className='w-full'
+              disabled={uploading || !preview}
+            >
+              {uploading ? 'Wird hochgeladen...' : 'Foto hochladen'}
+            </Button>
+          </CardFooter>
         </Card>
-      </div>
+      </form>
       <Toaster />
     </div>
   );
 }
+
+Upload.propTypes = {
+  supabase: PropTypes.shape({
+    storage: PropTypes.object.isRequired,
+    from: PropTypes.func.isRequired,
+  }).isRequired,
+};
 
 export default Upload;

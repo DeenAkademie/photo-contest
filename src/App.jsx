@@ -1,4 +1,3 @@
-import React from 'react';
 import {
   BrowserRouter as Router,
   Routes,
@@ -7,7 +6,6 @@ import {
 } from 'react-router-dom';
 import { createClient } from '@supabase/supabase-js';
 import Gallery from './components/Gallery';
-import Upload from './components/Upload';
 import Admin from './components/Admin';
 import Login from './components/Login';
 import ProtectedRoute from './components/ProtectedRoute';
@@ -27,11 +25,12 @@ function App() {
             <div className='flex items-center justify-between h-20 px-4 sm:px-6 lg:px-8'>
               {/* Logo Section */}
               <div className='flex-shrink-0'>
-                <NavLink
-                  to='/'
-                  className='flex items-center text-primary'
-                >
-                  <Image className='w-18 h-10' src="./src/assets/deen-akademie-logo.png" alt='Logo' />
+                <NavLink to='/' className='flex items-center text-primary'>
+                  <Image
+                    className='w-18 h-10'
+                    src='./src/assets/deen-akademie-logo.png'
+                    alt='Logo'
+                  />
                   <span className='font-bold text-lg hidden sm:block '>
                     Deen Akademie
                   </span>
@@ -44,7 +43,7 @@ function App() {
                   Foto Contest Gewinnspiel
                 </h1>
                 <p className='text-sm text-muted-foreground mt-1'>
-                Wählen Sie die besten Aufnahmen
+                  Wählen Sie die besten Aufnahmen
                 </p>
               </div>
 
