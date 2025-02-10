@@ -25,11 +25,6 @@ function Gallery({ supabase }) {
   const [selectedPhoto, setSelectedPhoto] = useState(null);
   const { toast } = useToast();
 
-  useEffect(() => {
-    fetchPhotos();
-    checkVoteStatus();
-  }, []);
-
   const fetchPhotos = useCallback(async () => {
     try {
       setLoading(true);
@@ -78,6 +73,11 @@ function Gallery({ supabase }) {
       console.error('Error checking vote status:', error);
     }
   }, [supabase, getVisitorId]);
+
+  useEffect(() => {
+    checkVoteStatus();
+    fetchPhotos();
+  }, [checkVoteStatus, fetchPhotos]);
 
   const handleVote = async (photoId) => {
     try {
@@ -141,6 +141,7 @@ function Gallery({ supabase }) {
     }
   };
 
+  // eslint-disable-next-line no-unused-vars
   const handleDeletePhoto = async (photoId) => {
     try {
       // First delete related votes
@@ -175,6 +176,16 @@ function Gallery({ supabase }) {
       });
     }
   };
+
+  // Sortiere die Einträge nach Abstimmungszeitpunkt
+  const sortedEntries = photos.sort((a, b) => {
+    // Wenn ein Eintrag eine Abstimmung hat, kommt er nach vorne
+    if (a.votes && !b.votes) return -1;
+    if (!a.votes && b.votes) return 1;
+
+    // Bei gleicher Abstimmungssituation nach Datum sortieren
+    return b.timestamp - a.timestamp;
+  });
 
   if (loading) {
     return (
@@ -228,7 +239,7 @@ function Gallery({ supabase }) {
   return (
     <div className='w-full p-4 md:p-6 lg:p-8'>
       <div className='grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4'>
-        {photos.map((photo) => (
+        {sortedEntries.map((photo) => (
           <Card
             key={photo.id}
             className={`overflow-hidden transition-all duration-300 hover:shadow-lg cursor-pointer

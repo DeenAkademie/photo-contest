@@ -1,9 +1,15 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Button } from "./ui/button";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "./ui/card";
-import { useToast } from "./ui/use-toast";
-import { Input } from "./ui/input";
+import { Button } from './ui/button';
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+} from './ui/card';
+import { useToast } from './ui/use-toast';
+import { Input } from './ui/input';
 import {
   Table,
   TableBody,
@@ -11,8 +17,9 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "./ui/table";
+} from './ui/table';
 import Upload from './Upload';
+import PropTypes from 'prop-types';
 
 function Admin({ supabase }) {
   const [photos, setPhotos] = useState([]);
@@ -22,19 +29,7 @@ function Admin({ supabase }) {
   const { toast } = useToast();
   const navigate = useNavigate();
 
-  useEffect(() => {
-    checkAuth();
-    fetchPhotos();
-  }, []);
-
-  const checkAuth = async () => {
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session) {
-      navigate('/login');
-    }
-  };
-
-  const fetchPhotos = async () => {
+  const fetchPhotos = useCallback(async () => {
     try {
       setLoading(true);
       const { data, error } = await supabase
@@ -44,25 +39,29 @@ function Admin({ supabase }) {
 
       if (error) throw error;
       setPhotos(data || []);
+      // eslint-disable-next-line no-unused-vars
     } catch (error) {
       toast({
-        variant: "destructive",
-        title: "Fehler",
-        description: "Fotos konnten nicht geladen werden"
+        variant: 'destructive',
+        title: 'Fehler',
+        description: 'Fotos konnten nicht geladen werden',
       });
     } finally {
       setLoading(false);
     }
-  };
+  }, [supabase, toast]);
+
+  useEffect(() => {
+    fetchPhotos();
+  }, [fetchPhotos]);
 
   const handleDelete = async (id, image_url) => {
     if (!window.confirm('Möchten Sie dieses Foto wirklich löschen?')) return;
-    
+
     try {
       const fileName = image_url.split('/').pop();
-      
-      const { error: storageError } = await supabase
-        .storage
+
+      const { error: storageError } = await supabase.storage
         .from('photos')
         .remove([fileName]);
 
@@ -76,16 +75,16 @@ function Admin({ supabase }) {
       if (dbError) throw dbError;
 
       toast({
-        title: "Erfolgreich gelöscht",
-        description: "Das Foto wurde erfolgreich gelöscht"
+        title: 'Erfolgreich gelöscht',
+        description: 'Das Foto wurde erfolgreich gelöscht',
       });
 
       fetchPhotos();
     } catch (error) {
       toast({
-        variant: "destructive",
-        title: "Fehler beim Löschen",
-        description: error.message
+        variant: 'destructive',
+        title: 'Fehler beim Löschen',
+        description: error.message,
       });
     }
   };
@@ -95,26 +94,24 @@ function Admin({ supabase }) {
       const { error } = await supabase
         .from('photos')
         .update({
-          first_name: photo.first_name,
-          last_name: photo.last_name,
-          email: photo.email
+          account_name: photo.account_name,
         })
         .eq('id', photo.id);
 
       if (error) throw error;
 
       toast({
-        title: "Erfolgreich aktualisiert",
-        description: "Die Daten wurden erfolgreich aktualisiert"
+        title: 'Erfolgreich aktualisiert',
+        description: 'Die Daten wurden erfolgreich aktualisiert',
       });
 
       setEditingPhoto(null);
       fetchPhotos();
     } catch (error) {
       toast({
-        variant: "destructive",
-        title: "Fehler beim Aktualisieren",
-        description: error.message
+        variant: 'destructive',
+        title: 'Fehler beim Aktualisieren',
+        description: error.message,
       });
     }
   };
@@ -125,41 +122,46 @@ function Admin({ supabase }) {
   };
 
   if (loading) {
-    return <div className="flex items-center justify-center min-h-screen">Laden...</div>;
+    return (
+      <div className='flex items-center justify-center min-h-screen'>
+        Laden...
+      </div>
+    );
   }
 
   return (
-    <div className="container mx-auto py-8">
-      <div className="flex justify-between items-center mb-8">
-        <h1 className="text-3xl font-bold">Admin Dashboard</h1>
-        <div className="space-x-4">
+    <div className='container mx-auto py-8'>
+      <div className='flex justify-between items-center mb-8'>
+        <h1 className='text-3xl font-bold'>Admin Dashboard</h1>
+        <div className='space-x-4'>
           <Button onClick={() => setShowUpload(!showUpload)}>
             {showUpload ? 'Zurück zur Übersicht' : 'Neues Foto hochladen'}
           </Button>
-          <Button variant="outline" onClick={handleLogout}>
+          <Button variant='outline' onClick={handleLogout}>
             Abmelden
           </Button>
         </div>
       </div>
 
       {showUpload ? (
-        <Upload 
-          supabase={supabase} 
+        <Upload
+          supabase={supabase}
           onSuccess={() => {
             setShowUpload(false);
             fetchPhotos();
             toast({
-              title: "Upload erfolgreich",
-              description: "Das Foto wurde erfolgreich hochgeladen"
+              title: 'Upload erfolgreich',
+              description: 'Das Foto wurde erfolgreich hochgeladen',
             });
-          }} 
+          }}
         />
       ) : (
         <Card>
           <CardHeader>
             <CardTitle>Alle Fotos</CardTitle>
             <CardDescription>
-              Verwalten Sie hier alle hochgeladenen Fotos und deren Informationen
+              Verwalten Sie hier alle hochgeladenen Fotos und deren
+              Informationen
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -167,8 +169,7 @@ function Admin({ supabase }) {
               <TableHeader>
                 <TableRow>
                   <TableHead>Vorschau</TableHead>
-                  <TableHead>Name</TableHead>
-                  <TableHead>Email</TableHead>
+                  <TableHead>Account Name</TableHead>
                   <TableHead>Stimmen</TableHead>
                   <TableHead>Datum</TableHead>
                   <TableHead>Aktionen</TableHead>
@@ -178,93 +179,72 @@ function Admin({ supabase }) {
                 {photos.map((photo) => (
                   <TableRow key={photo.id}>
                     <TableCell>
-                      <img 
-                        src={photo.image_url} 
-                        alt="Vorschau" 
-                        className="w-20 h-20 object-cover rounded"
+                      <img
+                        src={photo.image_url}
+                        alt='Vorschau'
+                        className='w-20 h-20 object-cover rounded'
                       />
                     </TableCell>
                     <TableCell>
                       {editingPhoto?.id === photo.id ? (
-                        <div className="space-y-2">
-                          <Input
-                            value={editingPhoto.first_name}
-                            onChange={(e) => setEditingPhoto({
-                              ...editingPhoto,
-                              first_name: e.target.value
-                            })}
-                            placeholder="Vorname"
-                          />
-                          <Input
-                            value={editingPhoto.last_name}
-                            onChange={(e) => setEditingPhoto({
-                              ...editingPhoto,
-                              last_name: e.target.value
-                            })}
-                            placeholder="Nachname"
-                          />
-                        </div>
-                      ) : (
-                        `${photo.first_name} ${photo.last_name}`
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      {editingPhoto?.id === photo.id ? (
                         <Input
-                          value={editingPhoto.email}
-                          onChange={(e) => setEditingPhoto({
-                            ...editingPhoto,
-                            email: e.target.value
-                          })}
-                          placeholder="Email"
+                          value={editingPhoto.account_name}
+                          onChange={(e) =>
+                            setEditingPhoto({
+                              ...editingPhoto,
+                              account_name: e.target.value,
+                            })
+                          }
+                          placeholder='Account Name'
                         />
                       ) : (
-                        photo.email
+                        photo.account_name
                       )}
                     </TableCell>
-                    <TableCell className="font-medium">
+                    <TableCell className='font-medium'>
                       {photo.votes} {photo.votes === 1 ? 'Stimme' : 'Stimmen'}
                     </TableCell>
                     <TableCell>
                       {new Date(photo.created_at).toLocaleDateString()}
                     </TableCell>
                     <TableCell>
-                      <div className="space-x-2">
+                      <div className='space-x-2'>
                         {editingPhoto?.id === photo.id ? (
                           <>
-                            <Button 
-                              size="sm"
+                            <Button
+                              size='sm'
                               onClick={() => handleUpdate(editingPhoto)}
                             >
                               Speichern
                             </Button>
-                            <Button 
-                              size="sm"
-                              variant="outline"
+                            <Button
+                              size='sm'
+                              variant='outline'
                               onClick={() => setEditingPhoto(null)}
                             >
                               Abbrechen
                             </Button>
                           </>
                         ) : (
-                          <Button 
-                            size="sm"
-                            variant="outline"
-                            onClick={() => setEditingPhoto({
-                              ...photo,
-                              // Wir kopieren nur die editierbaren Felder
-                              first_name: photo.first_name,
-                              last_name: photo.last_name,
-                              email: photo.email
-                            })}
+                          <Button
+                            size='sm'
+                            variant='outline'
+                            onClick={() =>
+                              setEditingPhoto({
+                                ...photo,
+                                account_name: photo.account_name,
+                              })
+                            }
                           >
                             Bearbeiten
                           </Button>
                         )}
-                        <Button 
-                          variant="destructive"
-                          size="sm"
-                          onClick={() => handleDelete(photo.id, photo.image_url)}
+                        <Button
+                          variant='destructive'
+                          size='sm'
+                          onClick={() =>
+                            handleDelete(photo.id, photo.image_url)
+                          }
                         >
                           Löschen
                         </Button>
@@ -280,5 +260,18 @@ function Admin({ supabase }) {
     </div>
   );
 }
+
+Admin.propTypes = {
+  supabase: PropTypes.shape({
+    auth: PropTypes.shape({
+      getSession: PropTypes.func.isRequired,
+      signOut: PropTypes.func.isRequired,
+    }).isRequired,
+    storage: PropTypes.shape({
+      from: PropTypes.func.isRequired,
+    }).isRequired,
+    from: PropTypes.func.isRequired,
+  }).isRequired,
+};
 
 export default Admin;
