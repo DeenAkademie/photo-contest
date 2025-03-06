@@ -40,10 +40,20 @@ function Gallery({ supabase }) {
   const fetchPhotos = useCallback(async () => {
     try {
       setLoading(true);
+      console.log('Supabase Client verfügbar:', !!supabase);
+      
+      // Teste die Verbindung mit einer einfachen Abfrage
+      console.log('Teste Verbindung zur Datenbank...');
+      
       const { data, error } = await supabase
         .from('photos')
         .select('*')
         .order('votes', { ascending: false });
+      
+      console.log('Anfrage an photos-Tabelle gesendet');
+      console.log('Antwortdaten:', data);
+      console.log('Fehler:', error);
+      
       if (error) throw error;
       setPhotos(data || []);
     } catch (error) {
@@ -176,19 +186,20 @@ function Gallery({ supabase }) {
               );
             }
             
-            // Wenn wir in der Entwicklungsumgebung sind und einen Bestätigungslink erhalten haben,
+            // Wenn wir einen Bestätigungslink erhalten haben,
             // zeigen wir diesen in der Konsole an und bieten die Möglichkeit, ihn direkt zu verwenden
             if (emailResponse.confirmationUrl) {
-              console.log('Bestätigungslink (Entwicklungsmodus):', emailResponse.confirmationUrl);
+              console.log('Bestätigungslink:', emailResponse.confirmationUrl);
               
               // Optional: Automatisch den Token verwenden (für Entwicklungszwecke)
-              if (window.confirm('Entwicklungsmodus: Möchten Sie die Abstimmung automatisch bestätigen?')) {
+              if (window.confirm('Möchten Sie die Abstimmung automatisch bestätigen?')) {
                 const urlParams = new URLSearchParams(new URL(emailResponse.confirmationUrl).search);
                 const autoToken = urlParams.get('token');
                 const autoPhotoId = urlParams.get('photoId');
                 
                 if (autoToken && autoPhotoId) {
                   await confirmVote(autoToken);
+                  return; // Frühzeitig beenden, da die Abstimmung bereits bestätigt wurde
                 }
               }
             }
@@ -227,6 +238,24 @@ function Gallery({ supabase }) {
             }
 
             emailResponse = data;
+            
+            // Wenn wir einen Bestätigungslink erhalten haben,
+            // zeigen wir diesen in der Konsole an und bieten die Möglichkeit, ihn direkt zu verwenden
+            if (emailResponse.confirmationUrl) {
+              console.log('Bestätigungslink:', emailResponse.confirmationUrl);
+              
+              // Optional: Automatisch den Token verwenden (für Entwicklungszwecke)
+              if (window.confirm('Möchten Sie die Abstimmung automatisch bestätigen?')) {
+                const urlParams = new URLSearchParams(new URL(emailResponse.confirmationUrl).search);
+                const autoToken = urlParams.get('token');
+                const autoPhotoId = urlParams.get('photoId');
+                
+                if (autoToken && autoPhotoId) {
+                  await confirmVote(autoToken);
+                  return; // Frühzeitig beenden, da die Abstimmung bereits bestätigt wurde
+                }
+              }
+            }
           } catch (invokeError) {
             console.error(
               'Fehler beim Aufrufen der Supabase Edge Function:',
