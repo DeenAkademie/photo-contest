@@ -5,6 +5,9 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:local": "cross-env VITE_ENV=development supabase start && vite",
+    "dev:prod": "cross-env VITE_ENV=production vite",
+    "dev:full": "concurrently \"npm run dev:local\" \"supabase functions serve send-vote-confirmation --no-verify-jwt\"",
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview"
@@ -37,6 +40,8 @@
     "@types/react-dom": "^18.3.5",
     "@vitejs/plugin-react": "^4.3.4",
     "autoprefixer": "^10.4.20",
+    "concurrently": "^8.2.2",
+    "cross-env": "^7.0.3",
     "eslint": "^9.17.0",
     "eslint-plugin-react": "^7.37.2",
     "eslint-plugin-react-hooks": "^5.0.0",

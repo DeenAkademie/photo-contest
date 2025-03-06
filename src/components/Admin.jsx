@@ -21,6 +21,24 @@ import {
 import Upload from './Upload';
 import PropTypes from 'prop-types';
 
+// Funktion zum Anpassen der Bild-URLs
+const getAdjustedImageUrl = (originalUrl) => {
+  // Prüfe, ob wir in der lokalen Entwicklungsumgebung sind
+  const isLocalDevelopment = 
+    typeof window !== 'undefined' && 
+    (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
+  
+  if (isLocalDevelopment && originalUrl.includes('ailikfeahugaovsutzjv.supabase.co')) {
+    // Ersetze die Online-URL durch die lokale URL
+    return originalUrl.replace(
+      'https://ailikfeahugaovsutzjv.supabase.co', 
+      'http://localhost:54321'
+    );
+  }
+  
+  return originalUrl;
+};
+
 function Admin({ supabase }) {
   const [photos, setPhotos] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -180,7 +198,7 @@ function Admin({ supabase }) {
                   <TableRow key={photo.id}>
                     <TableCell>
                       <img
-                        src={photo.image_url}
+                        src={getAdjustedImageUrl(photo.image_url)}
                         alt='Vorschau'
                         className='w-20 h-20 object-cover rounded'
                       />

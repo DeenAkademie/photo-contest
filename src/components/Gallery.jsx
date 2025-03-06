@@ -12,9 +12,17 @@ import {
 import { useToast } from './ui/use-toast';
 import { Toaster } from './ui/toaster';
 import { Progress } from './ui/progress';
-import { Dialog, DialogContent } from './ui/dialog';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from './ui/dialog';
+import { Input } from './ui/input';
+import { Label } from './ui/label';
 import PropTypes from 'prop-types';
-import FingerprintJS from '@fingerprintjs/fingerprintjs';
 
 function Gallery({ supabase }) {
   const [photos, setPhotos] = useState([]);
@@ -23,6 +31,10 @@ function Gallery({ supabase }) {
   const [uploading, setUploading] = useState(false);
   const [loading, setLoading] = useState(true);
   const [selectedPhoto, setSelectedPhoto] = useState(null);
+  const [emailModalOpen, setEmailModalOpen] = useState(false);
+  const [pendingVotePhotoId, setPendingVotePhotoId] = useState(null);
+  const [email, setEmail] = useState('');
+  const [confirmationSent, setConfirmationSent] = useState(false);
   const { toast } = useToast();
 
   const fetchPhotos = useCallback(async () => {
@@ -32,7 +44,6 @@ function Gallery({ supabase }) {
         .from('photos')
         .select('*')
         .order('votes', { ascending: false });
-
       if (error) throw error;
       setPhotos(data || []);
     } catch (error) {
@@ -47,94 +58,249 @@ function Gallery({ supabase }) {
     }
   }, [supabase, toast]);
 
-  const getVisitorId = useCallback(async () => {
-    const fp = await FingerprintJS.load();
-    const result = await fp.get();
-    return result.visitorId;
-  }, []);
-
   const checkVoteStatus = useCallback(async () => {
     try {
-      const visitorId = await getVisitorId();
+      // Prüfen, ob ein Cookie mit einer Email-Adresse existiert
+      const storedEmail = localStorage.getItem('voter_email');
 
-      const { data, error } = await supabase
-        .from('votes')
-        .select('photo_id')
-        .eq('visitor_id', visitorId)
-        .single();
+      if (storedEmail) {
+        setEmail(storedEmail);
 
-      if (error && error.code !== 'PGRST116') {
-        console.error('Error checking vote status:', error);
+        // Prüfen, ob diese Email bereits abgestimmt hat
+        const { data, error } = await supabase
+          .from('votes')
+          .select('photo_id')
+          .eq('email', storedEmail)
+          .single();
+
+        if (error && error.code !== 'PGRST116') {
+          console.error('Error checking vote status:', error);
+        }
+
+        setHasVoted(!!data);
+        setVotedPhotoId(data?.photo_id || null);
       }
-
-      setHasVoted(!!data);
-      setVotedPhotoId(data?.photo_id || null);
     } catch (error) {
       console.error('Error checking vote status:', error);
     }
-  }, [supabase, getVisitorId]);
+  }, [supabase]);
 
   useEffect(() => {
     checkVoteStatus();
     fetchPhotos();
   }, [checkVoteStatus, fetchPhotos]);
 
-  const handleVote = async (photoId) => {
-    try {
-      setUploading(true);
-      const visitorId = await getVisitorId();
+  const initiateVote = (photoId) => {
+    setPendingVotePhotoId(photoId);
+    setEmailModalOpen(true);
+    setConfirmationSent(false);
+  };
 
-      if (hasVoted) {
-        if (votedPhotoId) {
-          const { error: decrementError } = await supabase.rpc(
-            'decrement_votes',
-            {
-              row_id: votedPhotoId,
-            }
-          );
-
-          if (decrementError) throw decrementError;
-        }
-
-        const { error: deleteError } = await supabase
-          .from('votes')
-          .delete()
-          .eq('visitor_id', visitorId);
-
-        if (deleteError) throw deleteError;
-      }
-
-      const { error: voteError } = await supabase.from('votes').insert([
-        {
-          photo_id: photoId,
-          visitor_id: visitorId,
-        },
-      ]);
-
-      if (voteError) throw voteError;
-
-      const { error: incrementError } = await supabase.rpc('increment_votes', {
-        row_id: photoId,
-      });
-
-      if (incrementError) throw incrementError;
-
-      setHasVoted(true);
-      setVotedPhotoId(photoId);
-      await fetchPhotos();
-
-      toast({
-        title: hasVoted ? 'Stimme geändert' : 'Erfolgreich abgestimmt',
-        description: hasVoted
-          ? 'Ihre Stimme wurde erfolgreich geändert'
-          : 'Ihre Stimme wurde erfolgreich gezählt',
-      });
-    } catch (error) {
-      console.error('Error:', error);
+  const sendConfirmationEmail = async () => {
+    if (!email || !email.includes('@')) {
       toast({
         variant: 'destructive',
-        title: 'Fehler',
-        description: 'Ihre Stimme konnte nicht gezählt werden',
+        title: 'Ungültige Email',
+        description: 'Bitte geben Sie eine gültige Email-Adresse ein',
+      });
+      return;
+    }
+
+    try {
+      setUploading(true);
+
+      // Generiere einen einmaligen Token
+      const token =
+        Math.random().toString(36).substring(2, 15) +
+        Math.random().toString(36).substring(2, 15);
+
+      // Speichere den Token in der Datenbank mit Ablaufzeit (1 Stunde)
+      const expiresAt = new Date();
+      expiresAt.setHours(expiresAt.getHours() + 1);
+
+      try {
+        // 1. Datenbank-Operation: Token speichern
+        const { error: dbError } = await supabase
+          .from('vote_confirmations')
+          .insert([
+            {
+              email: email,
+              photo_id: pendingVotePhotoId,
+              token: token,
+              expires_at: expiresAt.toISOString(),
+            },
+          ]);
+
+        if (dbError) {
+          console.error('Datenbank-Fehler beim Speichern des Tokens:', dbError);
+          throw new Error(
+            `Datenbank-Fehler: ${dbError.message || 'Unbekannter Fehler'}`
+          );
+        }
+
+        // 2. E-Mail-Versand
+        const isLocalEnvironment =
+          window.location.hostname === 'localhost' ||
+          window.location.hostname === '127.0.0.1';
+        let emailResponse;
+
+        if (isLocalEnvironment) {
+          // Lokale Entwicklung - direkt die lokale Edge Function aufrufen
+          try {
+            console.log('Verwende lokale Edge Function für E-Mail-Versand');
+            const response = await fetch(
+              'http://localhost:54321/functions/v1/send-vote-confirmation',
+              {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                  email: email,
+                  token: token,
+                  photoId: pendingVotePhotoId,
+                }),
+              }
+            );
+
+            emailResponse = await response.json();
+
+            if (!response.ok) {
+              console.error('Lokale Edge Function Fehler:', emailResponse);
+              throw new Error(
+                `Lokale Edge Function: ${
+                  emailResponse.message ||
+                  emailResponse.error ||
+                  'Unbekannter Fehler'
+                }`
+              );
+            }
+            
+            // Wenn wir in der Entwicklungsumgebung sind und einen Bestätigungslink erhalten haben,
+            // zeigen wir diesen in der Konsole an und bieten die Möglichkeit, ihn direkt zu verwenden
+            if (emailResponse.confirmationUrl) {
+              console.log('Bestätigungslink (Entwicklungsmodus):', emailResponse.confirmationUrl);
+              
+              // Optional: Automatisch den Token verwenden (für Entwicklungszwecke)
+              if (window.confirm('Entwicklungsmodus: Möchten Sie die Abstimmung automatisch bestätigen?')) {
+                const urlParams = new URLSearchParams(new URL(emailResponse.confirmationUrl).search);
+                const autoToken = urlParams.get('token');
+                const autoPhotoId = urlParams.get('photoId');
+                
+                if (autoToken && autoPhotoId) {
+                  await confirmVote(autoToken);
+                }
+              }
+            }
+          } catch (fetchError) {
+            console.error(
+              'Netzwerkfehler bei lokaler Edge Function:',
+              fetchError
+            );
+            throw new Error(
+              `Netzwerkfehler (lokal): ${
+                fetchError.message ||
+                'Verbindung zur lokalen Edge Function fehlgeschlagen'
+              }`
+            );
+          }
+        } else {
+          // Produktion - Supabase Edge Function über die API aufrufen
+          try {
+            console.log('Verwende Supabase Edge Function für E-Mail-Versand');
+            const { data, error: functionError } =
+              await supabase.functions.invoke('send-vote-confirmation', {
+                body: {
+                  email: email,
+                  token: token,
+                  photoId: pendingVotePhotoId,
+                },
+              });
+
+            if (functionError) {
+              console.error('Supabase Edge Function Fehler:', functionError);
+              throw new Error(
+                `Supabase Edge Function: ${
+                  functionError.message || 'Unbekannter Fehler'
+                }`
+              );
+            }
+
+            emailResponse = data;
+          } catch (invokeError) {
+            console.error(
+              'Fehler beim Aufrufen der Supabase Edge Function:',
+              invokeError
+            );
+            throw new Error(
+              `Supabase Invoke Fehler: ${
+                invokeError.message || 'Unbekannter Fehler'
+              }`
+            );
+          }
+        }
+
+        console.log('E-Mail-Versand erfolgreich:', emailResponse);
+
+        // 3. Speichere die Email im localStorage für zukünftige Abstimmungen
+        localStorage.setItem('voter_email', email);
+
+        setConfirmationSent(true);
+
+        toast({
+          title: 'Bestätigungsmail gesendet',
+          description:
+            'Bitte überprüfen Sie Ihren Posteingang und bestätigen Sie Ihre Stimme',
+        });
+      } catch (operationError) {
+        // Fehler bei Datenbank oder E-Mail-Versand
+        console.error('Operationsfehler:', operationError);
+
+        // Versuche, den Token zu löschen, falls er erstellt wurde
+        try {
+          await supabase.from('vote_confirmations').delete().eq('token', token);
+        } catch (cleanupError) {
+          console.error(
+            'Fehler beim Bereinigen des fehlgeschlagenen Tokens:',
+            cleanupError
+          );
+        }
+
+        throw operationError; // Weitergeben an den äußeren catch-Block
+      }
+    } catch (error) {
+      // Allgemeiner Fehler-Handler
+      console.error('Gesamtfehler beim E-Mail-Versand:', error);
+
+      // Benutzerfreundliche Fehlermeldung basierend auf dem Fehlertyp
+      let errorTitle = 'Fehler';
+      let errorDescription =
+        'Die Bestätigungsmail konnte nicht gesendet werden';
+
+      if (error.message.includes('Datenbank-Fehler')) {
+        errorTitle = 'Datenbank-Fehler';
+        errorDescription =
+          'Ihre Anfrage konnte nicht gespeichert werden. Bitte versuchen Sie es später erneut.';
+      } else if (
+        error.message.includes('Lokale Edge Function') ||
+        error.message.includes('Netzwerkfehler (lokal)')
+      ) {
+        errorTitle = 'Lokaler Server-Fehler';
+        errorDescription =
+          'Der lokale E-Mail-Server ist nicht erreichbar. Bitte starten Sie den Server neu.';
+      } else if (
+        error.message.includes('Supabase Edge Function') ||
+        error.message.includes('Supabase Invoke Fehler')
+      ) {
+        errorTitle = 'Server-Fehler';
+        errorDescription =
+          'Der E-Mail-Server ist derzeit nicht verfügbar. Bitte versuchen Sie es später erneut.';
+      }
+
+      toast({
+        variant: 'destructive',
+        title: errorTitle,
+        description: errorDescription,
       });
     } finally {
       setUploading(false);
@@ -186,6 +352,115 @@ function Gallery({ supabase }) {
     // Bei gleicher Abstimmungssituation nach Datum sortieren
     return b.timestamp - a.timestamp;
   });
+
+  // Füge eine Route für die Bestätigung hinzu
+  // Diese Funktion wird aufgerufen, wenn der Benutzer auf den Link in der E-Mail klickt
+  const confirmVote = async (token) => {
+    try {
+      // Verifiziere den Token
+      const { data: confirmationData, error: confirmationError } =
+        await supabase
+          .from('vote_confirmations')
+          .select('*')
+          .eq('token', token)
+          .single();
+
+      if (confirmationError || !confirmationData) {
+        throw new Error('Ungültiger oder abgelaufener Token');
+      }
+
+      const email = confirmationData.email;
+      const photoId = confirmationData.photo_id;
+
+      // Prüfe, ob der Token abgelaufen ist
+      if (new Date(confirmationData.expires_at) < new Date()) {
+        throw new Error('Der Bestätigungslink ist abgelaufen');
+      }
+
+      // Wenn bereits abgestimmt wurde, entferne die alte Stimme
+      const { data: existingVote, error: voteCheckError } = await supabase
+        .from('votes')
+        .select('photo_id')
+        .eq('email', email)
+        .single();
+
+      if (!voteCheckError && existingVote) {
+        // Alte Stimme entfernen
+        const { error: decrementError } = await supabase.rpc(
+          'decrement_votes',
+          {
+            row_id: existingVote.photo_id,
+          }
+        );
+
+        if (decrementError) throw decrementError;
+
+        const { error: deleteError } = await supabase
+          .from('votes')
+          .delete()
+          .eq('email', email);
+
+        if (deleteError) throw deleteError;
+      }
+
+      // Füge die neue Stimme hinzu
+      const { error: voteError } = await supabase.from('votes').insert([
+        {
+          photo_id: photoId,
+          email: email,
+        },
+      ]);
+
+      if (voteError) throw voteError;
+
+      // Erhöhe den Stimmenzähler
+      const { error: incrementError } = await supabase.rpc('increment_votes', {
+        row_id: photoId,
+      });
+
+      if (incrementError) throw incrementError;
+
+      // Lösche den verwendeten Token
+      await supabase.from('vote_confirmations').delete().eq('token', token);
+
+      // Aktualisiere den Status
+      setHasVoted(true);
+      setVotedPhotoId(photoId);
+      await fetchPhotos();
+
+      toast({
+        title: existingVote ? 'Stimme geändert' : 'Erfolgreich abgestimmt',
+        description: existingVote
+          ? 'Ihre Stimme wurde erfolgreich geändert'
+          : 'Ihre Stimme wurde erfolgreich gezählt',
+      });
+
+      return true;
+    } catch (error) {
+      console.error('Error confirming vote:', error);
+      toast({
+        variant: 'destructive',
+        title: 'Fehler',
+        description: error.message || 'Ihre Stimme konnte nicht gezählt werden',
+      });
+      return false;
+    }
+  };
+
+  // Prüfe beim Laden der Seite, ob ein Token in der URL ist
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    const token = url.searchParams.get('token');
+    const photoId = url.searchParams.get('photoId');
+
+    if (token && photoId) {
+      // Token aus URL entfernen (um doppelte Bestätigungen zu vermeiden)
+      window.history.replaceState({}, document.title, window.location.pathname);
+
+      // Bestätige die Stimme
+      confirmVote(token);
+    }
+  }, []);
 
   if (loading) {
     return (
@@ -278,7 +553,7 @@ function Gallery({ supabase }) {
             <CardFooter className='p-3 pt-0'>
               <Button
                 className='w-full h-8 text-sm'
-                onClick={() => handleVote(photo.id)}
+                onClick={() => initiateVote(photo.id)}
                 disabled={uploading}
                 variant={photo.id === votedPhotoId ? 'secondary' : 'default'}
               >
@@ -317,46 +592,67 @@ function Gallery({ supabase }) {
         ))}
       </div>
 
-      <Dialog
-        open={!!selectedPhoto}
-        onOpenChange={() => setSelectedPhoto(null)}
-        className='p-0'
-      >
-        <DialogContent className='max-w-none w-screen h-screen p-0 bg-background/80 backdrop-blur-md duration-300 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95'>
-          <div
-            className='relative w-full h-full flex items-center justify-center cursor-pointer'
-            onClick={() => setSelectedPhoto(null)}
-          >
-            <img
-              src={selectedPhoto?.image_url}
-              alt='Vollbild'
-              className='max-h-[90vh] max-w-[90vw] object-contain rounded-lg shadow-2xl transition-transform duration-300 hover:scale-[1.02]'
-              onClick={(e) => e.stopPropagation()}
-            />
-            <Button
-              variant='outline'
-              size='icon'
-              className='absolute top-4 right-4 rounded-full'
-              onClick={() => setSelectedPhoto(null)}
-            >
-              <svg
-                xmlns='http://www.w3.org/2000/svg'
-                className='h-4 w-4'
-                fill='none'
-                viewBox='0 0 24 24'
-                stroke='currentColor'
-              >
-                <path
-                  strokeLinecap='round'
-                  strokeLinejoin='round'
-                  strokeWidth={2}
-                  d='M6 18L18 6M6 6l12 12'
-                />
-              </svg>
-            </Button>
-          </div>
+      {/* Email Modal */}
+      <Dialog open={emailModalOpen} onOpenChange={setEmailModalOpen}>
+        <DialogContent className='sm:max-w-[425px]'>
+          <DialogHeader>
+            <DialogTitle>Abstimmung bestätigen</DialogTitle>
+            <DialogDescription>
+              {confirmationSent
+                ? 'Wir haben Ihnen eine Bestätigungsmail gesendet. Bitte überprüfen Sie Ihren Posteingang und klicken Sie auf den Bestätigungslink.'
+                : 'Bitte geben Sie Ihre E-Mail-Adresse ein, um Ihre Stimme abzugeben. Sie erhalten eine Bestätigungsmail.'}
+            </DialogDescription>
+          </DialogHeader>
+
+          {!confirmationSent && (
+            <>
+              <div className='grid gap-4 py-4'>
+                <div className='grid grid-cols-4 items-center gap-4'>
+                  <Label htmlFor='email' className='text-right'>
+                    E-Mail
+                  </Label>
+                  <Input
+                    id='email'
+                    type='email'
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder='ihre.email@beispiel.de'
+                    className='col-span-3'
+                  />
+                </div>
+              </div>
+              <DialogFooter>
+                <Button onClick={sendConfirmationEmail} disabled={uploading}>
+                  {uploading ? 'Wird gesendet...' : 'Bestätigungsmail senden'}
+                </Button>
+              </DialogFooter>
+            </>
+          )}
         </DialogContent>
       </Dialog>
+
+      {/* Foto Vollbild Dialog */}
+      {selectedPhoto && (
+        <Dialog
+          open={!!selectedPhoto}
+          onOpenChange={() => setSelectedPhoto(null)}
+          className='p-0'
+        >
+          <DialogContent className='max-w-none w-screen h-screen p-0 bg-background/80 backdrop-blur-md duration-300 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95'>
+            <div
+              className='relative w-full h-full flex items-center justify-center cursor-pointer'
+              onClick={() => setSelectedPhoto(null)}
+            >
+              <img
+                src={selectedPhoto?.image_url}
+                alt='Vollbild'
+                className='max-h-[90vh] max-w-[90vw] object-contain rounded-lg shadow-2xl transition-transform duration-300 hover:scale-[1.02]'
+                onClick={(e) => e.stopPropagation()}
+              />
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
 
       <Toaster />
     </div>
@@ -367,6 +663,9 @@ Gallery.propTypes = {
   supabase: PropTypes.shape({
     from: PropTypes.func.isRequired,
     rpc: PropTypes.func.isRequired,
+    functions: PropTypes.shape({
+      invoke: PropTypes.func.isRequired,
+    }).isRequired,
   }).isRequired,
 };
 
