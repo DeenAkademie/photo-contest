@@ -176,9 +176,9 @@ function Gallery({ supabase }) {
             emailResponse = await response.json();
 
             if (!response.ok) {
-              console.error('Lokale Edge Function Fehler:', emailResponse);
+              console.error('Edge Function Fehler:', emailResponse);
               throw new Error(
-                `Lokale Edge Function: ${
+                `Edge Function: ${
                   emailResponse.message ||
                   emailResponse.error ||
                   'Unbekannter Fehler'
@@ -186,13 +186,19 @@ function Gallery({ supabase }) {
               );
             }
             
-            // Wenn wir einen Bestätigungslink erhalten haben,
-            // zeigen wir diesen in der Konsole an und bieten die Möglichkeit, ihn direkt zu verwenden
+            // Wenn der E-Mail-Versand fehlgeschlagen ist, aber ein Bestätigungslink zurückgegeben wurde
             if (emailResponse.confirmationUrl) {
               console.log('Bestätigungslink:', emailResponse.confirmationUrl);
               
-              // Optional: Automatisch den Token verwenden (für Entwicklungszwecke)
-              if (window.confirm('Möchten Sie die Abstimmung automatisch bestätigen?')) {
+              // Zeige eine Warnung an
+              toast({
+                title: 'E-Mail konnte nicht gesendet werden',
+                description: 'Sie können trotzdem abstimmen, indem Sie den Link direkt verwenden.',
+                variant: 'warning',
+              });
+              
+              // Frage, ob der Benutzer die Abstimmung direkt bestätigen möchte
+              if (window.confirm('E-Mail konnte nicht gesendet werden. Möchten Sie Ihre Abstimmung direkt bestätigen?')) {
                 const urlParams = new URLSearchParams(new URL(emailResponse.confirmationUrl).search);
                 const autoToken = urlParams.get('token');
                 const autoPhotoId = urlParams.get('photoId');
