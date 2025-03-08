@@ -147,163 +147,29 @@ function Gallery({ supabase }) {
       expiresAt.setHours(expiresAt.getHours() + 1);
 
       try {
-        // 1. Datenbank-Operation: Token speichern
-        const { error: dbError } = await supabase
-          .from('vote_confirmations')
-          .insert([
-            {
-              email: email,
-              photo_id: pendingVotePhotoId,
-              token: token,
-              expires_at: expiresAt.toISOString(),
-            },
-          ]);
-
-        if (dbError) {
-          console.error('Datenbank-Fehler beim Speichern des Tokens:', dbError);
-          throw new Error(
-            `Datenbank-Fehler: ${dbError.message || 'Unbekannter Fehler'}`
-          );
+        // 1. Alte Stimme löschen (falls vorhanden)
+        await supabase
+          .from('votes')
+          .delete()
+          .eq('email', email);
+        
+        // Kurze Verzögerung, um sicherzustellen, dass die Löschung abgeschlossen ist
+        await new Promise(resolve => setTimeout(resolve, 300));
+        
+        // 2. Neue Stimme eintragen
+        // Die Aktualisierung der Stimmenanzahl in der photos-Tabelle wird durch einen Datenbank-Trigger erledigt
+        const { error: insertError } = await supabase
+          .from('votes')
+          .insert({
+            email: email,
+            photo_id: pendingVotePhotoId,
+            created_at: new Date().toISOString(),
+          });
+          
+        if (insertError) {
+          console.error('Fehler beim Speichern der Stimme:', insertError);
+          throw new Error('Fehler beim Speichern der Stimme');
         }
-
-        // 2. E-Mail-Versand
-        const isLocalEnvironment =
-          window.location.hostname === 'localhost' ||
-          window.location.hostname === '127.0.0.1';
-        let emailResponse;
-
-        if (isLocalEnvironment) {
-          // Lokale Entwicklung - direkt die lokale Edge Function aufrufen
-          try {
-            console.log('Verwende Edge Function für E-Mail-Versand');
-            const response = await fetch(
-              'http://localhost:54321/functions/v1/send-vote-confirmation',
-              {
-                method: 'POST',
-                headers: {
-                  'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                  email: email,
-                  token: token,
-                  photoId: pendingVotePhotoId,
-                }),
-              }
-            );
-
-            emailResponse = await response.json();
-            console.log('Edge Function Antwort:', emailResponse);
-
-            // Wenn der E-Mail-Versand fehlgeschlagen ist, aber ein Bestätigungslink zurückgegeben wurde
-            if (emailResponse.confirmationUrl) {
-              console.log('Bestätigungslink verfügbar:', emailResponse.confirmationUrl);
-              
-              // Zeige eine Warnung an
-              toast({
-                title: 'E-Mail konnte nicht gesendet werden',
-                description: 'Sie können trotzdem abstimmen, indem Sie den Link direkt verwenden.',
-                variant: 'warning',
-              });
-              
-              // Frage, ob der Benutzer die Abstimmung direkt bestätigen möchte
-              if (window.confirm('E-Mail konnte nicht gesendet werden. Möchten Sie Ihre Abstimmung direkt bestätigen?')) {
-                const urlParams = new URLSearchParams(new URL(emailResponse.confirmationUrl).search);
-                const autoToken = urlParams.get('token');
-                const autoPhotoId = urlParams.get('photoId');
-                
-                if (autoToken && autoPhotoId) {
-                  await confirmVote(autoToken);
-                  return; // Frühzeitig beenden, da die Abstimmung bereits bestätigt wurde
-                }
-              }
-              return; // Beende die Funktion, da wir den Benutzer bereits informiert haben
-            }
-
-            // Wenn die Antwort erfolgreich war, aber kein Bestätigungslink zurückgegeben wurde
-            if (emailResponse.success) {
-              setConfirmationSent(true);
-              toast({
-                title: 'Bestätigungs-E-Mail gesendet',
-                description: 'Bitte überprüfen Sie Ihren Posteingang und bestätigen Sie Ihre Stimme.',
-              });
-            } else if (!response.ok) {
-              // Wenn die Antwort nicht erfolgreich war und kein Bestätigungslink zurückgegeben wurde
-              console.error('Edge Function Fehler:', emailResponse);
-              throw new Error(
-                `Edge Function: ${
-                  emailResponse.message ||
-                  emailResponse.error ||
-                  'Unbekannter Fehler'
-                }`
-              );
-            }
-          } catch (fetchError) {
-            console.error(
-              'Netzwerkfehler bei lokaler Edge Function:',
-              fetchError
-            );
-            throw new Error(
-              `Netzwerkfehler (lokal): ${
-                fetchError.message ||
-                'Verbindung zur lokalen Edge Function fehlgeschlagen'
-              }`
-            );
-          }
-        } else {
-          // Produktion - Supabase Edge Function über die API aufrufen
-          try {
-            console.log('Verwende Supabase Edge Function für E-Mail-Versand');
-            const { data, error: functionError } =
-              await supabase.functions.invoke('send-vote-confirmation', {
-                body: {
-                  email: email,
-                  token: token,
-                  photoId: pendingVotePhotoId,
-                },
-              });
-
-            if (functionError) {
-              console.error('Supabase Edge Function Fehler:', functionError);
-              throw new Error(
-                `Supabase Edge Function: ${
-                  functionError.message || 'Unbekannter Fehler'
-                }`
-              );
-            }
-
-            emailResponse = data;
-            
-            // Wenn wir einen Bestätigungslink erhalten haben,
-            // zeigen wir diesen in der Konsole an und bieten die Möglichkeit, ihn direkt zu verwenden
-            if (emailResponse.confirmationUrl) {
-              console.log('Bestätigungslink:', emailResponse.confirmationUrl);
-              
-              // Optional: Automatisch den Token verwenden (für Entwicklungszwecke)
-              if (window.confirm('Möchten Sie die Abstimmung automatisch bestätigen?')) {
-                const urlParams = new URLSearchParams(new URL(emailResponse.confirmationUrl).search);
-                const autoToken = urlParams.get('token');
-                const autoPhotoId = urlParams.get('photoId');
-                
-                if (autoToken && autoPhotoId) {
-                  await confirmVote(autoToken);
-                  return; // Frühzeitig beenden, da die Abstimmung bereits bestätigt wurde
-                }
-              }
-            }
-          } catch (invokeError) {
-            console.error(
-              'Fehler beim Aufrufen der Supabase Edge Function:',
-              invokeError
-            );
-            throw new Error(
-              `Supabase Invoke Fehler: ${
-                invokeError.message || 'Unbekannter Fehler'
-              }`
-            );
-          }
-        }
-
-        console.log('E-Mail-Versand erfolgreich:', emailResponse);
 
         // 3. Speichere die Email im localStorage für zukünftige Abstimmungen
         localStorage.setItem('voter_email', email);
@@ -443,24 +309,27 @@ function Gallery({ supabase }) {
       }
 
       try {
-        // Verwende UPSERT statt separater DELETE und INSERT
-        // Die Aktualisierung der Stimmenanzahl in der photos-Tabelle wird durch einen Datenbank-Trigger erledigt
-        const { error: upsertError } = await supabase
+        // 1. Alte Stimme löschen (falls vorhanden)
+        await supabase
           .from('votes')
-          .upsert(
-            {
-              email: email,
-              photo_id: photoId,
-              created_at: new Date().toISOString(),
-            },
-            { 
-              onConflict: 'email',  // Bei Konflikt mit der E-Mail
-              ignoreDuplicates: false  // Aktualisiere den bestehenden Eintrag
-            }
-          );
+          .delete()
+          .eq('email', email);
+        
+        // Kurze Verzögerung, um sicherzustellen, dass die Löschung abgeschlossen ist
+        await new Promise(resolve => setTimeout(resolve, 300));
+        
+        // 2. Neue Stimme eintragen
+        // Die Aktualisierung der Stimmenanzahl in der photos-Tabelle wird durch einen Datenbank-Trigger erledigt
+        const { error: insertError } = await supabase
+          .from('votes')
+          .insert({
+            email: email,
+            photo_id: photoId,
+            created_at: new Date().toISOString(),
+          });
           
-        if (upsertError) {
-          console.error('Fehler beim Speichern der Stimme:', upsertError);
+        if (insertError) {
+          console.error('Fehler beim Speichern der Stimme:', insertError);
           throw new Error('Fehler beim Speichern der Stimme');
         }
         
@@ -566,14 +435,17 @@ function Gallery({ supabase }) {
                 alt={`Foto von ${photo.account_name}`}
                 className='w-full h-full object-cover'
               />
+              {/* Markierung für das gewählte Foto */}
               {photo.id === votedPhotoId && (
-                <div className='absolute top-1 right-1'>
+                <div className='absolute top-2 right-2 z-10'>
                   <Button
                     variant='secondary'
                     size='sm'
                     className='pointer-events-none text-xs py-1 h-7'
+                    title="Diese Markierung ist nur in diesem Browser sichtbar"
                   >
                     Ihre Wahl
+                    <span className="block text-[9px] opacity-80">(nur in diesem Browser)</span>
                   </Button>
                 </div>
               )}
