@@ -434,33 +434,41 @@ function Gallery({ supabase }) {
         const { error: decrementError } = await supabase.rpc(
           'decrement_votes',
           {
-            row_id: existingVote.photo_id,
+            row_id: parseInt(existingVote.photo_id, 10),
           }
         );
 
-        if (decrementError) throw decrementError;
+        if (decrementError) {
+          console.error('Fehler beim Entfernen der alten Stimme:', decrementError);
+          // Wir setzen fort, auch wenn ein Fehler auftritt
+        }
 
+        // Alte Stimme aus der votes-Tabelle löschen
         const { error: deleteError } = await supabase
           .from('votes')
           .delete()
           .eq('email', email);
 
-        if (deleteError) throw deleteError;
+        if (deleteError) {
+          console.error('Fehler beim Löschen der alten Stimme:', deleteError);
+          // Wir setzen fort, auch wenn ein Fehler auftritt
+        }
       }
 
-      // Füge die neue Stimme hinzu
+      // Neue Stimme eintragen
       const { error: voteError } = await supabase.from('votes').insert([
         {
-          photo_id: photoId,
           email: email,
+          photo_id: photoId,
+          created_at: new Date().toISOString(),
         },
       ]);
 
       if (voteError) throw voteError;
 
-      // Erhöhe den Stimmenzähler
+      // Stimmen für das Foto erhöhen
       const { error: incrementError } = await supabase.rpc('increment_votes', {
-        row_id: photoId,
+        row_id: parseInt(photoId, 10),
       });
 
       if (incrementError) throw incrementError;
