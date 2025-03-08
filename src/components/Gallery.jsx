@@ -422,81 +422,65 @@ function Gallery({ supabase }) {
         throw new Error('Der Bestätigungslink ist abgelaufen');
       }
 
-      // Wenn bereits abgestimmt wurde, entferne die alte Stimme
-      const { data: existingVote, error: voteCheckError } = await supabase
-        .from('votes')
-        .select('photo_id')
-        .eq('email', email)
-        .single();
-
-      if (!voteCheckError && existingVote) {
-        // Alte Stimme entfernen
-        const { error: decrementError } = await supabase.rpc(
-          'decrement_votes',
-          {
-            row_id: parseInt(existingVote.photo_id, 10),
-          }
-        );
-
-        if (decrementError) {
-          console.error('Fehler beim Entfernen der alten Stimme:', decrementError);
-          // Wir setzen fort, auch wenn ein Fehler auftritt
-        }
-
-        // Alte Stimme aus der votes-Tabelle löschen
-        const { error: deleteError } = await supabase
+      // Vereinfachter Ansatz: Wenn bereits abgestimmt wurde, entferne die alte Stimme
+      try {
+        // 1. Alte Stimme löschen (falls vorhanden)
+        await supabase
           .from('votes')
           .delete()
           .eq('email', email);
-
-        if (deleteError) {
-          console.error('Fehler beim Löschen der alten Stimme:', deleteError);
-          // Wir setzen fort, auch wenn ein Fehler auftritt
-        }
+          
+        // 2. Neue Stimme eintragen
+        await supabase.from('votes').insert([
+          {
+            email: email,
+            photo_id: photoId,
+            created_at: new Date().toISOString(),
+          },
+        ]);
+        
+        // 3. Stimmen für das Foto aktualisieren
+        // Statt RPC-Funktionen zu verwenden, aktualisieren wir die Stimmen direkt
+        // Hole zuerst die aktuelle Anzahl der Stimmen für dieses Foto
+        const { count } = await supabase
+          .from('votes')
+          .select('*', { count: 'exact' })
+          .eq('photo_id', photoId);
+          
+        // Aktualisiere dann die Stimmenanzahl in der photos-Tabelle
+        await supabase
+          .from('photos')
+          .update({ votes: count })
+          .eq('id', photoId);
+          
+        // 4. Lösche den verwendeten Token
+        await supabase.from('vote_confirmations').delete().eq('token', token);
+        
+        // 5. Aktualisiere den Status
+        setHasVoted(true);
+        setVotedPhotoId(photoId);
+        localStorage.setItem('voter_email', email);
+        
+        // 6. Aktualisiere die Fotoliste
+        fetchPhotos();
+        
+        // 7. Zeige eine Erfolgsmeldung
+        toast({
+          title: 'Vielen Dank!',
+          description: 'Ihre Stimme wurde erfolgreich gezählt.',
+        });
+        
+      } catch (error) {
+        console.error('Fehler beim Abstimmen:', error);
+        throw new Error('Fehler beim Speichern der Stimme');
       }
-
-      // Neue Stimme eintragen
-      const { error: voteError } = await supabase.from('votes').insert([
-        {
-          email: email,
-          photo_id: photoId,
-          created_at: new Date().toISOString(),
-        },
-      ]);
-
-      if (voteError) throw voteError;
-
-      // Stimmen für das Foto erhöhen
-      const { error: incrementError } = await supabase.rpc('increment_votes', {
-        row_id: parseInt(photoId, 10),
-      });
-
-      if (incrementError) throw incrementError;
-
-      // Lösche den verwendeten Token
-      await supabase.from('vote_confirmations').delete().eq('token', token);
-
-      // Aktualisiere den Status
-      setHasVoted(true);
-      setVotedPhotoId(photoId);
-      await fetchPhotos();
-
-      toast({
-        title: existingVote ? 'Stimme geändert' : 'Erfolgreich abgestimmt',
-        description: existingVote
-          ? 'Ihre Stimme wurde erfolgreich geändert'
-          : 'Ihre Stimme wurde erfolgreich gezählt',
-      });
-
-      return true;
     } catch (error) {
       console.error('Error confirming vote:', error);
       toast({
         variant: 'destructive',
         title: 'Fehler',
-        description: error.message || 'Ihre Stimme konnte nicht gezählt werden',
+        description: error.message || 'Fehler bei der Bestätigung der Stimme',
       });
-      return false;
     }
   };
 
