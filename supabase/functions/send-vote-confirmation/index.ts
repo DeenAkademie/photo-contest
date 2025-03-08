@@ -15,9 +15,12 @@ const corsHeaders = {
 // Definiere Umgebungsvariablen mit Fallback-Werten
 const BASE_URL =
   Deno.env.get('BASE_URL') || 'https://fotocontest.deen-akademie.com';
-const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY') || '';
-const SENDER_EMAIL =
-  Deno.env.get('SENDER_EMAIL') || 'noreply@deen-akademie.com';
+
+// EmailJS Konfiguration
+const EMAILJS_SERVICE_ID = Deno.env.get('EMAILJS_SERVICE_ID') || 'your-service-id';
+const EMAILJS_TEMPLATE_ID = Deno.env.get('EMAILJS_TEMPLATE_ID') || 'your-template-id';
+const EMAILJS_PUBLIC_KEY = Deno.env.get('EMAILJS_PUBLIC_KEY') || 'your-public-key';
+const EMAILJS_PRIVATE_KEY = Deno.env.get('EMAILJS_PRIVATE_KEY') || 'your-private-key';
 const SENDER_NAME = Deno.env.get('SENDER_NAME') || 'Foto Contest';
 
 serve(async (req) => {
@@ -45,57 +48,47 @@ serve(async (req) => {
     }
 
     console.log(`Using BASE_URL: ${dynamicBaseUrl}`);
+    console.log(`EmailJS Service ID: ${EMAILJS_SERVICE_ID}`);
+    console.log(`EmailJS Template ID: ${EMAILJS_TEMPLATE_ID}`);
+    console.log(`EmailJS Public Key: ${EMAILJS_PUBLIC_KEY ? 'Vorhanden' : 'Fehlt'}`);
+    console.log(`EmailJS Private Key: ${EMAILJS_PRIVATE_KEY ? 'Vorhanden' : 'Fehlt'}`);
+    console.log(`SENDER_NAME: ${SENDER_NAME}`);
 
     // Erstelle die Bestätigungs-URL mit der dynamischen BASE_URL
     const confirmationUrl = `${dynamicBaseUrl}/?token=${token}&photoId=${photoId}`;
 
-    // E-Mail-Inhalte erstellen
-    const emailHtml = `
-      <h1>Vielen Dank für Ihre Teilnahme am Foto Contest!</h1>
-      <p>Bitte klicken Sie auf den folgenden Link, um Ihre Stimme zu bestätigen:</p>
-      <p><a href="${confirmationUrl}" style="padding: 10px 20px; background-color: #4CAF50; color: white; text-decoration: none; border-radius: 5px;">Stimme bestätigen</a></p>
-      <p>Oder kopieren Sie diesen Link in Ihren Browser:</p>
-      <p>${confirmationUrl}</p>
-      <p>Der Link ist eine Stunde gültig.</p>
-      <p>Wenn Sie diese E-Mail nicht angefordert haben, können Sie sie ignorieren.</p>
-    `;
-
-    const emailText = `
-      Vielen Dank für Ihre Teilnahme am Foto Contest!
-      
-      Bitte klicken Sie auf den folgenden Link, um Ihre Stimme zu bestätigen:
-      ${confirmationUrl}
-      
-      Der Link ist eine Stunde gültig.
-      
-      Wenn Sie diese E-Mail nicht angefordert haben, können Sie sie ignorieren.
-    `;
-
     try {
-      // Resend API-Anfrage
-      const response = await fetch('https://api.resend.com/emails', {
+      // EmailJS API Endpunkt
+      const emailjsEndpoint = 'https://api.emailjs.com/api/v1.0/email/send';
+      
+      // EmailJS Template Parameter
+      const templateParams = {
+        to_email: email,
+        confirmation_url: confirmationUrl,
+        sender_name: SENDER_NAME
+      };
+      
+      // EmailJS API Request
+      const response = await fetch(emailjsEndpoint, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${RESEND_API_KEY}`,
+          'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          from: `${SENDER_NAME} <${SENDER_EMAIL}>`,
-          to: [email],
-          subject: 'Bestätigen Sie Ihre Stimme beim Foto Contest',
-          html: emailHtml,
-          text: emailText,
-        }),
+          service_id: EMAILJS_SERVICE_ID,
+          template_id: EMAILJS_TEMPLATE_ID,
+          user_id: EMAILJS_PUBLIC_KEY,
+          template_params: templateParams,
+          accessToken: EMAILJS_PRIVATE_KEY
+        })
       });
-
+      
       if (!response.ok) {
-        const errorData = await response.json();
-        console.error('Resend API Fehler:', errorData);
-        throw new Error(`Resend API Fehler: ${JSON.stringify(errorData)}`);
+        const errorData = await response.text();
+        throw new Error(`EmailJS API error: ${response.status} - ${errorData}`);
       }
-
-      const responseData = await response.json();
-      console.log('Resend API Antwort:', responseData);
+      
+      console.log('E-Mail erfolgreich gesendet an:', email);
 
       return new Response(
         JSON.stringify({

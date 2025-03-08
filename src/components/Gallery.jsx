@@ -157,7 +157,7 @@ function Gallery({ supabase }) {
         if (isLocalEnvironment) {
           // Lokale Entwicklung - direkt die lokale Edge Function aufrufen
           try {
-            console.log('Verwende lokale Edge Function für E-Mail-Versand');
+            console.log('Verwende Edge Function für E-Mail-Versand');
             const response = await fetch(
               'http://localhost:54321/functions/v1/send-vote-confirmation',
               {
@@ -174,21 +174,11 @@ function Gallery({ supabase }) {
             );
 
             emailResponse = await response.json();
+            console.log('Edge Function Antwort:', emailResponse);
 
-            if (!response.ok) {
-              console.error('Edge Function Fehler:', emailResponse);
-              throw new Error(
-                `Edge Function: ${
-                  emailResponse.message ||
-                  emailResponse.error ||
-                  'Unbekannter Fehler'
-                }`
-              );
-            }
-            
             // Wenn der E-Mail-Versand fehlgeschlagen ist, aber ein Bestätigungslink zurückgegeben wurde
             if (emailResponse.confirmationUrl) {
-              console.log('Bestätigungslink:', emailResponse.confirmationUrl);
+              console.log('Bestätigungslink verfügbar:', emailResponse.confirmationUrl);
               
               // Zeige eine Warnung an
               toast({
@@ -208,6 +198,26 @@ function Gallery({ supabase }) {
                   return; // Frühzeitig beenden, da die Abstimmung bereits bestätigt wurde
                 }
               }
+              return; // Beende die Funktion, da wir den Benutzer bereits informiert haben
+            }
+
+            // Wenn die Antwort erfolgreich war, aber kein Bestätigungslink zurückgegeben wurde
+            if (emailResponse.success) {
+              setConfirmationSent(true);
+              toast({
+                title: 'Bestätigungs-E-Mail gesendet',
+                description: 'Bitte überprüfen Sie Ihren Posteingang und bestätigen Sie Ihre Stimme.',
+              });
+            } else if (!response.ok) {
+              // Wenn die Antwort nicht erfolgreich war und kein Bestätigungslink zurückgegeben wurde
+              console.error('Edge Function Fehler:', emailResponse);
+              throw new Error(
+                `Edge Function: ${
+                  emailResponse.message ||
+                  emailResponse.error ||
+                  'Unbekannter Fehler'
+                }`
+              );
             }
           } catch (fetchError) {
             console.error(

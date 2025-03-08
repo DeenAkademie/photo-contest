@@ -22,4 +22,12 @@ if (!supabaseUrl || !supabaseAnonKey) {
   throw new Error('Fehlende Supabase Umgebungsvariablen');
 }
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+// Erstelle den Supabase-Client mit globalen Headers
+export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+  global: {
+    headers: {
+      'Accept': 'application/json',
+      'Content-Type': 'application/json'
+    }
+  }
+});
