@@ -442,17 +442,33 @@ function Gallery({ supabase }) {
         // 3. Stimmen für das Foto aktualisieren
         // Statt RPC-Funktionen zu verwenden, aktualisieren wir die Stimmen direkt
         // Hole zuerst die aktuelle Anzahl der Stimmen für dieses Foto
-        const { count } = await supabase
+        const { data, error: countError } = await supabase
           .from('votes')
-          .select('*', { count: 'exact' })
+          .select('*')
           .eq('photo_id', photoId);
           
+        if (countError) {
+          console.error('Fehler beim Zählen der Stimmen:', countError);
+          throw new Error('Fehler beim Aktualisieren der Stimmenanzahl');
+        }
+        
+        // Berechne die Anzahl der Stimmen
+        const voteCount = data ? data.length : 0;
+        console.log(`Aktuelle Stimmenanzahl für Foto ${photoId}: ${voteCount}`);
+        
         // Aktualisiere dann die Stimmenanzahl in der photos-Tabelle
-        await supabase
+        const { error: updateError } = await supabase
           .from('photos')
-          .update({ votes: count })
+          .update({ votes: voteCount })
           .eq('id', photoId);
           
+        if (updateError) {
+          console.error('Fehler beim Aktualisieren der Stimmenanzahl:', updateError);
+          throw new Error('Fehler beim Aktualisieren der Stimmenanzahl');
+        }
+        
+        console.log(`Stimmenanzahl für Foto ${photoId} auf ${voteCount} aktualisiert`);
+        
         // 4. Lösche den verwendeten Token
         await supabase.from('vote_confirmations').delete().eq('token', token);
         
