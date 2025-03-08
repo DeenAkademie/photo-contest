@@ -442,7 +442,7 @@ function Gallery({ supabase }) {
         // 3. Stimmen für das Foto aktualisieren
         // Statt RPC-Funktionen zu verwenden, aktualisieren wir die Stimmen direkt
         // Hole zuerst die aktuelle Anzahl der Stimmen für dieses Foto
-        const { data, error: countError } = await supabase
+        const { data: voteData, error: countError } = await supabase
           .from('votes')
           .select('*')
           .eq('photo_id', photoId);
@@ -453,14 +453,31 @@ function Gallery({ supabase }) {
         }
         
         // Berechne die Anzahl der Stimmen
-        const voteCount = data ? data.length : 0;
+        const voteCount = voteData ? voteData.length : 0;
         console.log(`Aktuelle Stimmenanzahl für Foto ${photoId}: ${voteCount}`);
+        console.log('Gefundene Stimmen:', voteData);
+        
+        // Überprüfe, ob das Foto existiert
+        const { data: photoData, error: photoError } = await supabase
+          .from('photos')
+          .select('*')
+          .eq('id', photoId)
+          .single();
+          
+        if (photoError) {
+          console.error('Fehler beim Abrufen des Fotos:', photoError);
+          throw new Error('Foto konnte nicht gefunden werden');
+        }
+        
+        console.log('Foto vor Update:', photoData);
         
         // Aktualisiere dann die Stimmenanzahl in der photos-Tabelle
-        const { error: updateError } = await supabase
+        // Verwende eine direkte UPDATE-Anweisung
+        const { data: updateData, error: updateError } = await supabase
           .from('photos')
           .update({ votes: voteCount })
-          .eq('id', photoId);
+          .eq('id', photoId)
+          .select();
           
         if (updateError) {
           console.error('Fehler beim Aktualisieren der Stimmenanzahl:', updateError);
@@ -468,6 +485,29 @@ function Gallery({ supabase }) {
         }
         
         console.log(`Stimmenanzahl für Foto ${photoId} auf ${voteCount} aktualisiert`);
+        console.log('Update-Ergebnis:', updateData);
+        
+        // Alternative Methode, falls die erste nicht funktioniert
+        if (!updateData || updateData.length === 0) {
+          console.log('Versuche alternative Update-Methode...');
+          
+          // Direktes Update mit explizitem Wert und anderer Syntax
+          try {
+            const { data: altUpdateData, error: altUpdateError } = await supabase
+              .from('photos')
+              .update([{ votes: voteCount }])
+              .eq('id', photoId)
+              .select();
+              
+            if (altUpdateError) {
+              console.error('Fehler bei alternativer Update-Methode:', altUpdateError);
+            } else {
+              console.log('Alternatives Update erfolgreich:', altUpdateData);
+            }
+          } catch (altError) {
+            console.error('Fehler bei alternativer Update-Methode (Exception):', altError);
+          }
+        }
         
         // 4. Lösche den verwendeten Token
         await supabase.from('vote_confirmations').delete().eq('token', token);
