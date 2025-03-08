@@ -81,14 +81,16 @@ function Gallery({ supabase }) {
           .from('votes')
           .select('photo_id')
           .eq('email', storedEmail)
-          .single();
+          .limit(1);
 
-        if (error && error.code !== 'PGRST116') {
+        if (error) {
           console.error('Error checking vote status:', error);
         }
 
-        setHasVoted(!!data);
-        setVotedPhotoId(data?.photo_id || null);
+        // Wenn Daten vorhanden sind, nehmen wir das erste Element
+        const voteData = data && data.length > 0 ? data[0] : null;
+        setHasVoted(!!voteData);
+        setVotedPhotoId(voteData?.photo_id || null);
       }
     } catch (error) {
       console.error('Error checking vote status:', error);
@@ -419,13 +421,15 @@ function Gallery({ supabase }) {
   const confirmVote = async (token) => {
     try {
       // Verifiziere den Token
-      const { data: confirmationData, error: confirmationError } =
+      const { data, error: confirmationError } =
         await supabase
           .from('vote_confirmations')
           .select('*')
           .eq('token', token)
-          .single();
+          .limit(1);
 
+      const confirmationData = data && data.length > 0 ? data[0] : null;
+      
       if (confirmationError || !confirmationData) {
         throw new Error('Ungültiger oder abgelaufener Token');
       }
@@ -476,13 +480,15 @@ function Gallery({ supabase }) {
         console.log('Gefundene Stimmen:', voteData);
         
         // Überprüfe, ob das Foto existiert
-        const { data: photoData, error: photoError } = await supabase
+        const { data: photoDataArray, error: photoError } = await supabase
           .from('photos')
           .select('*')
           .eq('id', photoId)
-          .single();
+          .limit(1);
           
-        if (photoError) {
+        const photoData = photoDataArray && photoDataArray.length > 0 ? photoDataArray[0] : null;
+        
+        if (photoError || !photoData) {
           console.error('Fehler beim Abrufen des Fotos:', photoError);
           throw new Error('Foto konnte nicht gefunden werden');
         }
