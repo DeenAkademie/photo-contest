@@ -48,11 +48,7 @@ function Gallery({ supabase }) {
       const { data, error } = await supabase
         .from('photos')
         .select('*')
-        .order('votes', { ascending: false })
-        .headers({
-          'Accept': 'application/json',
-          'Content-Type': 'application/json'
-        });
+        .order('votes', { ascending: false });
       
       console.log('Anfrage an photos-Tabelle gesendet');
       console.log('Antwortdaten:', data);
@@ -85,11 +81,7 @@ function Gallery({ supabase }) {
           .from('votes')
           .select('photo_id')
           .eq('email', storedEmail)
-          .single()
-          .headers({
-            'Accept': 'application/json',
-            'Content-Type': 'application/json'
-          });
+          .single();
 
         if (error && error.code !== 'PGRST116') {
           console.error('Error checking vote status:', error);
@@ -163,11 +155,7 @@ function Gallery({ supabase }) {
               token: token,
               expires_at: expiresAt.toISOString(),
             },
-          ])
-          .headers({
-            'Accept': 'application/json',
-            'Content-Type': 'application/json'
-          });
+          ]);
 
         if (dbError) {
           console.error('Datenbank-Fehler beim Speichern des Tokens:', dbError);
@@ -436,11 +424,7 @@ function Gallery({ supabase }) {
           .from('vote_confirmations')
           .select('*')
           .eq('token', token)
-          .single()
-          .headers({
-            'Accept': 'application/json',
-            'Content-Type': 'application/json'
-          });
+          .single();
 
       if (confirmationError || !confirmationData) {
         throw new Error('Ungültiger oder abgelaufener Token');
@@ -460,11 +444,7 @@ function Gallery({ supabase }) {
         await supabase
           .from('votes')
           .delete()
-          .eq('email', email)
-          .headers({
-            'Accept': 'application/json',
-            'Content-Type': 'application/json'
-          });
+          .eq('email', email);
           
         // 2. Neue Stimme eintragen
         await supabase
@@ -475,11 +455,7 @@ function Gallery({ supabase }) {
               photo_id: photoId,
               created_at: new Date().toISOString(),
             },
-          ])
-          .headers({
-            'Accept': 'application/json',
-            'Content-Type': 'application/json'
-          });
+          ]);
         
         // 3. Stimmen für das Foto aktualisieren
         // Statt RPC-Funktionen zu verwenden, aktualisieren wir die Stimmen direkt
@@ -487,11 +463,7 @@ function Gallery({ supabase }) {
         const { data: voteData, error: countError } = await supabase
           .from('votes')
           .select('*')
-          .eq('photo_id', photoId)
-          .headers({
-            'Accept': 'application/json',
-            'Content-Type': 'application/json'
-          });
+          .eq('photo_id', photoId);
           
         if (countError) {
           console.error('Fehler beim Zählen der Stimmen:', countError);
@@ -508,11 +480,7 @@ function Gallery({ supabase }) {
           .from('photos')
           .select('*')
           .eq('id', photoId)
-          .single()
-          .headers({
-            'Accept': 'application/json',
-            'Content-Type': 'application/json'
-          });
+          .single();
           
         if (photoError) {
           console.error('Fehler beim Abrufen des Fotos:', photoError);
@@ -527,11 +495,7 @@ function Gallery({ supabase }) {
           .from('photos')
           .update({ votes: voteCount })
           .eq('id', photoId)
-          .select()
-          .headers({
-            'Accept': 'application/json',
-            'Content-Type': 'application/json'
-          });
+          .select();
           
         if (updateError) {
           console.error('Fehler beim Aktualisieren der Stimmenanzahl:', updateError);
@@ -551,11 +515,7 @@ function Gallery({ supabase }) {
               .from('photos')
               .update([{ votes: voteCount }])
               .eq('id', photoId)
-              .select()
-              .headers({
-                'Accept': 'application/json',
-                'Content-Type': 'application/json'
-              });
+              .select();
               
             if (altUpdateError) {
               console.error('Fehler bei alternativer Update-Methode:', altUpdateError);
@@ -571,11 +531,7 @@ function Gallery({ supabase }) {
         await supabase
           .from('vote_confirmations')
           .delete()
-          .eq('token', token)
-          .headers({
-            'Accept': 'application/json',
-            'Content-Type': 'application/json'
-          });
+          .eq('token', token);
         
         // 5. Aktualisiere den Status
         setHasVoted(true);
