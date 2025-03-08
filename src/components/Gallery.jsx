@@ -100,6 +100,22 @@ function Gallery({ supabase }) {
     fetchPhotos();
   }, [checkVoteStatus, fetchPhotos]);
 
+  // Neuer useEffect-Hook, um URL-Parameter zu verarbeiten
+  useEffect(() => {
+    // URL-Parameter auslesen
+    const searchParams = new URLSearchParams(window.location.search);
+    const token = searchParams.get('token');
+    
+    // Wenn Token vorhanden ist, rufe die confirmVote-Funktion auf
+    if (token) {
+      console.log('Token in URL gefunden:', token);
+      confirmVote(token);
+      
+      // Parameter aus der URL entfernen
+      window.history.replaceState({}, document.title, window.location.pathname);
+    }
+  }, []); // Leeres Dependency-Array, damit es nur einmal beim Laden ausgeführt wird
+
   const initiateVote = (photoId) => {
     setPendingVotePhotoId(photoId);
     setEmailModalOpen(true);
@@ -540,21 +556,6 @@ function Gallery({ supabase }) {
     }
   };
 
-  // Prüfe beim Laden der Seite, ob ein Token in der URL ist
-  useEffect(() => {
-    const url = new URL(window.location.href);
-    const token = url.searchParams.get('token');
-    const photoId = url.searchParams.get('photoId');
-
-    if (token && photoId) {
-      // Token aus URL entfernen (um doppelte Bestätigungen zu vermeiden)
-      window.history.replaceState({}, document.title, window.location.pathname);
-
-      // Bestätige die Stimme
-      confirmVote(token);
-    }
-  }, []);
-
   if (loading) {
     return (
       <div className='w-full h-screen flex flex-col items-center justify-center gap-4'>
@@ -605,7 +606,7 @@ function Gallery({ supabase }) {
   }
 
   return (
-    <div className='w-full p-4 md:p-6 lg:p-8'>
+    <div className='container mx-auto py-8 px-4'>
       <div className='grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4'>
         {sortedEntries.map((photo) => (
           <Card
