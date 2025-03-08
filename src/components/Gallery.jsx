@@ -443,26 +443,24 @@ function Gallery({ supabase }) {
       }
 
       try {
-        // 1. Alte Stimme löschen (falls vorhanden)
-        await supabase
-          .from('votes')
-          .delete()
-          .eq('email', email);
-          
-        // 2. Neue Stimme eintragen
+        // Verwende UPSERT statt separater DELETE und INSERT
         // Die Aktualisierung der Stimmenanzahl in der photos-Tabelle wird durch einen Datenbank-Trigger erledigt
-        const { error: voteError } = await supabase
+        const { error: upsertError } = await supabase
           .from('votes')
-          .insert([
+          .upsert(
             {
               email: email,
               photo_id: photoId,
               created_at: new Date().toISOString(),
             },
-          ]);
+            { 
+              onConflict: 'email',  // Bei Konflikt mit der E-Mail
+              ignoreDuplicates: false  // Aktualisiere den bestehenden Eintrag
+            }
+          );
           
-        if (voteError) {
-          console.error('Fehler beim Speichern der Stimme:', voteError);
+        if (upsertError) {
+          console.error('Fehler beim Speichern der Stimme:', upsertError);
           throw new Error('Fehler beim Speichern der Stimme');
         }
         
