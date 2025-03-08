@@ -442,7 +442,6 @@ function Gallery({ supabase }) {
         throw new Error('Der Bestätigungslink ist abgelaufen');
       }
 
-      // Vereinfachter Ansatz: Wenn bereits abgestimmt wurde, entferne die alte Stimme
       try {
         // 1. Alte Stimme löschen (falls vorhanden)
         await supabase
@@ -451,7 +450,8 @@ function Gallery({ supabase }) {
           .eq('email', email);
           
         // 2. Neue Stimme eintragen
-        await supabase
+        // Die Aktualisierung der Stimmenanzahl in der photos-Tabelle wird durch einen Datenbank-Trigger erledigt
+        const { error: voteError } = await supabase
           .from('votes')
           .insert([
             {
@@ -460,94 +460,27 @@ function Gallery({ supabase }) {
               created_at: new Date().toISOString(),
             },
           ]);
-        
-        // 3. Stimmen für das Foto aktualisieren
-        // Statt RPC-Funktionen zu verwenden, aktualisieren wir die Stimmen direkt
-        // Hole zuerst die aktuelle Anzahl der Stimmen für dieses Foto
-        const { data: voteData, error: countError } = await supabase
-          .from('votes')
-          .select('*')
-          .eq('photo_id', photoId);
           
-        if (countError) {
-          console.error('Fehler beim Zählen der Stimmen:', countError);
-          throw new Error('Fehler beim Aktualisieren der Stimmenanzahl');
+        if (voteError) {
+          console.error('Fehler beim Speichern der Stimme:', voteError);
+          throw new Error('Fehler beim Speichern der Stimme');
         }
         
-        // Berechne die Anzahl der Stimmen
-        const voteCount = voteData ? voteData.length : 0;
-        console.log(`Aktuelle Stimmenanzahl für Foto ${photoId}: ${voteCount}`);
-        console.log('Gefundene Stimmen:', voteData);
-        
-        // Überprüfe, ob das Foto existiert
-        const { data: photoDataArray, error: photoError } = await supabase
-          .from('photos')
-          .select('*')
-          .eq('id', photoId)
-          .limit(1);
-          
-        const photoData = photoDataArray && photoDataArray.length > 0 ? photoDataArray[0] : null;
-        
-        if (photoError || !photoData) {
-          console.error('Fehler beim Abrufen des Fotos:', photoError);
-          throw new Error('Foto konnte nicht gefunden werden');
-        }
-        
-        console.log('Foto vor Update:', photoData);
-        
-        // Aktualisiere dann die Stimmenanzahl in der photos-Tabelle
-        // Verwende eine direkte UPDATE-Anweisung
-        const { data: updateData, error: updateError } = await supabase
-          .from('photos')
-          .update({ votes: voteCount })
-          .eq('id', photoId)
-          .select();
-          
-        if (updateError) {
-          console.error('Fehler beim Aktualisieren der Stimmenanzahl:', updateError);
-          throw new Error('Fehler beim Aktualisieren der Stimmenanzahl');
-        }
-        
-        console.log(`Stimmenanzahl für Foto ${photoId} auf ${voteCount} aktualisiert`);
-        console.log('Update-Ergebnis:', updateData);
-        
-        // Alternative Methode, falls die erste nicht funktioniert
-        if (!updateData || updateData.length === 0) {
-          console.log('Versuche alternative Update-Methode...');
-          
-          // Direktes Update mit explizitem Wert und anderer Syntax
-          try {
-            const { data: altUpdateData, error: altUpdateError } = await supabase
-              .from('photos')
-              .update([{ votes: voteCount }])
-              .eq('id', photoId)
-              .select();
-              
-            if (altUpdateError) {
-              console.error('Fehler bei alternativer Update-Methode:', altUpdateError);
-            } else {
-              console.log('Alternatives Update erfolgreich:', altUpdateData);
-            }
-          } catch (altError) {
-            console.error('Fehler bei alternativer Update-Methode (Exception):', altError);
-          }
-        }
-        
-        // 4. Lösche den verwendeten Token
+        // 3. Lösche den verwendeten Token
         await supabase
           .from('vote_confirmations')
           .delete()
           .eq('token', token);
         
-        // 5. Aktualisiere den Status
+        // 4. Aktualisiere den Status
         setHasVoted(true);
         setVotedPhotoId(photoId);
         localStorage.setItem('voter_email', email);
         
-        // 6. Aktualisiere die Fotoliste
+        // 5. Aktualisiere die Fotoliste
         fetchPhotos();
         
-        // 7. Zeige eine Erfolgsmeldung
+        // 6. Zeige eine Erfolgsmeldung
         toast({
           title: 'Vielen Dank!',
           description: 'Ihre Stimme wurde erfolgreich gezählt.',
