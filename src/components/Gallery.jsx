@@ -166,7 +166,52 @@ function Gallery({ supabase }) {
           throw new Error('Fehler beim Speichern der Stimme');
         }
 
-        // 3. Speichere die Email im localStorage für zukünftige Abstimmungen
+        // 3. Speichere den Token in der Datenbank mit Ablaufzeit (1 Stunde)
+        const { error: tokenError } = await supabase
+          .from('vote_confirmations')
+          .insert({
+            token: token,
+            email: email,
+            photo_id: pendingVotePhotoId,
+            expires_at: expiresAt.toISOString(),
+          });
+
+        if (tokenError) {
+          console.error('Fehler beim Speichern des Tokens:', tokenError);
+          throw new Error('Fehler beim Speichern des Tokens');
+        }
+
+        // 4. Sende die Bestätigungsmail über die Edge Function
+        try {
+          const { data: emailData, error: emailError } =
+            await supabase.functions.invoke('send-vote-confirmation', {
+              body: {
+                email: email,
+                token: token,
+                photoId: pendingVotePhotoId,
+              },
+            });
+
+          if (emailError) {
+            console.error(
+              'Fehler beim Aufrufen der Edge Function:',
+              emailError
+            );
+            throw new Error(
+              `Supabase Edge Function Fehler: ${emailError.message}`
+            );
+          }
+
+          console.log('Edge Function Antwort:', emailData);
+        } catch (emailFunctionError) {
+          console.error(
+            'Fehler beim E-Mail-Versand über Edge Function:',
+            emailFunctionError
+          );
+          throw emailFunctionError;
+        }
+
+        // 5. Speichere die Email im localStorage für zukünftige Abstimmungen
         localStorage.setItem('voter_email', email);
 
         setConfirmationSent(true);
