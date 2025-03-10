@@ -41,19 +41,19 @@ function Gallery({ supabase }) {
     try {
       setLoading(true);
       console.log('Supabase Client verfügbar:', !!supabase);
-      
+
       // Teste die Verbindung mit einer einfachen Abfrage
       console.log('Teste Verbindung zur Datenbank...');
-      
+
       const { data, error } = await supabase
         .from('photos')
         .select('*')
         .order('votes', { ascending: false });
-      
+
       console.log('Anfrage an photos-Tabelle gesendet');
       console.log('Antwortdaten:', data);
       console.log('Fehler:', error);
-      
+
       if (error) throw error;
       setPhotos(data || []);
     } catch (error) {
@@ -107,12 +107,12 @@ function Gallery({ supabase }) {
     // URL-Parameter auslesen
     const searchParams = new URLSearchParams(window.location.search);
     const token = searchParams.get('token');
-    
+
     // Wenn Token vorhanden ist, rufe die confirmVote-Funktion auf
     if (token) {
       console.log('Token in URL gefunden:', token);
       confirmVote(token);
-      
+
       // Parameter aus der URL entfernen
       window.history.replaceState({}, document.title, window.location.pathname);
     }
@@ -148,24 +148,19 @@ function Gallery({ supabase }) {
 
       try {
         // 1. Alte Stimme löschen (falls vorhanden)
-        await supabase
-          .from('votes')
-          .delete()
-          .eq('email', email);
-        
+        await supabase.from('votes').delete().eq('email', email);
+        console.log('confirmation mail wird gesendet', email);
         // Kurze Verzögerung, um sicherzustellen, dass die Löschung abgeschlossen ist
-        await new Promise(resolve => setTimeout(resolve, 300));
-        
+        await new Promise((resolve) => setTimeout(resolve, 300));
+
         // 2. Neue Stimme eintragen
         // Die Aktualisierung der Stimmenanzahl in der photos-Tabelle wird durch einen Datenbank-Trigger erledigt
-        const { error: insertError } = await supabase
-          .from('votes')
-          .insert({
-            email: email,
-            photo_id: pendingVotePhotoId,
-            created_at: new Date().toISOString(),
-          });
-          
+        const { error: insertError } = await supabase.from('votes').insert({
+          email: email,
+          photo_id: pendingVotePhotoId,
+          created_at: new Date().toISOString(),
+        });
+
         if (insertError) {
           console.error('Fehler beim Speichern der Stimme:', insertError);
           throw new Error('Fehler beim Speichern der Stimme');
@@ -287,15 +282,14 @@ function Gallery({ supabase }) {
   const confirmVote = async (token) => {
     try {
       // Verifiziere den Token
-      const { data, error: confirmationError } =
-        await supabase
-          .from('vote_confirmations')
-          .select('*')
-          .eq('token', token)
-          .limit(1);
+      const { data, error: confirmationError } = await supabase
+        .from('vote_confirmations')
+        .select('*')
+        .eq('token', token)
+        .limit(1);
 
       const confirmationData = data && data.length > 0 ? data[0] : null;
-      
+
       if (confirmationError || !confirmationData) {
         throw new Error('Ungültiger oder abgelaufener Token');
       }
@@ -310,49 +304,40 @@ function Gallery({ supabase }) {
 
       try {
         // 1. Alte Stimme löschen (falls vorhanden)
-        await supabase
-          .from('votes')
-          .delete()
-          .eq('email', email);
-        
+        await supabase.from('votes').delete().eq('email', email);
+
         // Kurze Verzögerung, um sicherzustellen, dass die Löschung abgeschlossen ist
-        await new Promise(resolve => setTimeout(resolve, 300));
-        
+        await new Promise((resolve) => setTimeout(resolve, 300));
+
         // 2. Neue Stimme eintragen
         // Die Aktualisierung der Stimmenanzahl in der photos-Tabelle wird durch einen Datenbank-Trigger erledigt
-        const { error: insertError } = await supabase
-          .from('votes')
-          .insert({
-            email: email,
-            photo_id: photoId,
-            created_at: new Date().toISOString(),
-          });
-          
+        const { error: insertError } = await supabase.from('votes').insert({
+          email: email,
+          photo_id: photoId,
+          created_at: new Date().toISOString(),
+        });
+
         if (insertError) {
           console.error('Fehler beim Speichern der Stimme:', insertError);
           throw new Error('Fehler beim Speichern der Stimme');
         }
-        
+
         // 3. Lösche den verwendeten Token
-        await supabase
-          .from('vote_confirmations')
-          .delete()
-          .eq('token', token);
-        
+        await supabase.from('vote_confirmations').delete().eq('token', token);
+
         // 4. Aktualisiere den Status
         setHasVoted(true);
         setVotedPhotoId(photoId);
         localStorage.setItem('voter_email', email);
-        
+
         // 5. Aktualisiere die Fotoliste
         fetchPhotos();
-        
+
         // 6. Zeige eine Erfolgsmeldung
         toast({
           title: 'Vielen Dank!',
           description: 'Ihre Stimme wurde erfolgreich gezählt.',
         });
-        
       } catch (error) {
         console.error('Fehler beim Abstimmen:', error);
         throw new Error('Fehler beim Speichern der Stimme');
@@ -442,10 +427,12 @@ function Gallery({ supabase }) {
                     variant='secondary'
                     size='sm'
                     className='pointer-events-none text-xs py-1 h-7'
-                    title="Diese Markierung ist nur in diesem Browser sichtbar"
+                    title='Diese Markierung ist nur in diesem Browser sichtbar'
                   >
                     Ihre Wahl
-                    <span className="block text-[9px] opacity-80">(nur in diesem Browser)</span>
+                    <span className='block text-[9px] opacity-80'>
+                      (nur in diesem Browser)
+                    </span>
                   </Button>
                 </div>
               )}

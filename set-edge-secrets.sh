@@ -1,0 +1,1 @@
+supabase secrets set BASE_URL="https://fotocontest.deen-akademie.com" EMAILJS_SERVICE_ID="DeenAkademie" EMAILJS_TEMPLATE_ID="template_bly00k5" EMAILJS_PUBLIC_KEY="34jGs-ZnKaNp1rN6F" EMAILJS_PRIVATE_KEY="HJE1bsO-aqgKLVoV-B6bl" SENDER_NAME="Deen Akademie"
