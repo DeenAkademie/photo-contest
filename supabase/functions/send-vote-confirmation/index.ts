@@ -17,10 +17,14 @@ const BASE_URL =
   Deno.env.get('BASE_URL') || 'https://fotocontest.deen-akademie.com';
 
 // EmailJS Konfiguration
-const EMAILJS_SERVICE_ID = Deno.env.get('EMAILJS_SERVICE_ID') || 'your-service-id';
-const EMAILJS_TEMPLATE_ID = Deno.env.get('EMAILJS_TEMPLATE_ID') || 'your-template-id';
-const EMAILJS_PUBLIC_KEY = Deno.env.get('EMAILJS_PUBLIC_KEY') || 'your-public-key';
-const EMAILJS_PRIVATE_KEY = Deno.env.get('EMAILJS_PRIVATE_KEY') || 'your-private-key';
+const EMAILJS_SERVICE_ID =
+  Deno.env.get('EMAILJS_SERVICE_ID') || 'your-service-id';
+const EMAILJS_TEMPLATE_ID =
+  Deno.env.get('EMAILJS_TEMPLATE_ID') || 'your-template-id';
+const EMAILJS_PUBLIC_KEY =
+  Deno.env.get('EMAILJS_PUBLIC_KEY') || 'your-public-key';
+const EMAILJS_PRIVATE_KEY =
+  Deno.env.get('EMAILJS_PRIVATE_KEY') || 'your-private-key';
 const SENDER_NAME = Deno.env.get('SENDER_NAME') || 'Foto Contest';
 
 serve(async (req) => {
@@ -50,8 +54,12 @@ serve(async (req) => {
     console.log(`Using BASE_URL: ${dynamicBaseUrl}`);
     console.log(`EmailJS Service ID: ${EMAILJS_SERVICE_ID}`);
     console.log(`EmailJS Template ID: ${EMAILJS_TEMPLATE_ID}`);
-    console.log(`EmailJS Public Key: ${EMAILJS_PUBLIC_KEY ? 'Vorhanden' : 'Fehlt'}`);
-    console.log(`EmailJS Private Key: ${EMAILJS_PRIVATE_KEY ? 'Vorhanden' : 'Fehlt'}`);
+    console.log(
+      `EmailJS Public Key: ${EMAILJS_PUBLIC_KEY ? 'Vorhanden' : 'Fehlt'}`
+    );
+    console.log(
+      `EmailJS Private Key: ${EMAILJS_PRIVATE_KEY ? 'Vorhanden' : 'Fehlt'}`
+    );
     console.log(`SENDER_NAME: ${SENDER_NAME}`);
 
     // Erstelle die Bestätigungs-URL mit der dynamischen BASE_URL
@@ -60,34 +68,34 @@ serve(async (req) => {
     try {
       // EmailJS API Endpunkt
       const emailjsEndpoint = 'https://api.emailjs.com/api/v1.0/email/send';
-      
+
       // EmailJS Template Parameter
       const templateParams = {
         to_email: email,
         confirmation_url: confirmationUrl,
-        sender_name: SENDER_NAME
+        sender_name: SENDER_NAME,
       };
-      
+
       // EmailJS API Request
       const response = await fetch(emailjsEndpoint, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
         },
         body: JSON.stringify({
           service_id: EMAILJS_SERVICE_ID,
           template_id: EMAILJS_TEMPLATE_ID,
           user_id: EMAILJS_PUBLIC_KEY,
           template_params: templateParams,
-          accessToken: EMAILJS_PRIVATE_KEY
-        })
+          accessToken: EMAILJS_PRIVATE_KEY,
+        }),
       });
-      
+
       if (!response.ok) {
         const errorData = await response.text();
         throw new Error(`EmailJS API error: ${response.status} - ${errorData}`);
       }
-      
+
       console.log('E-Mail erfolgreich gesendet an:', email);
 
       return new Response(
@@ -108,7 +116,10 @@ serve(async (req) => {
           success: false,
           message: 'E-Mail-Versand fehlgeschlagen',
           confirmationUrl: confirmationUrl,
-          error: emailError.message,
+          error:
+            emailError instanceof Error
+              ? emailError.message
+              : String(emailError),
         }),
         {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },

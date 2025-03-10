@@ -149,24 +149,11 @@ function Gallery({ supabase }) {
       try {
         // 1. Alte Stimme löschen (falls vorhanden)
         await supabase.from('votes').delete().eq('email', email);
-        console.log('confirmation mail wird gesendet', email);
+
         // Kurze Verzögerung, um sicherzustellen, dass die Löschung abgeschlossen ist
         await new Promise((resolve) => setTimeout(resolve, 300));
 
-        // 2. Neue Stimme eintragen
-        // Die Aktualisierung der Stimmenanzahl in der photos-Tabelle wird durch einen Datenbank-Trigger erledigt
-        const { error: insertError } = await supabase.from('votes').insert({
-          email: email,
-          photo_id: pendingVotePhotoId,
-          created_at: new Date().toISOString(),
-        });
-
-        if (insertError) {
-          console.error('Fehler beim Speichern der Stimme:', insertError);
-          throw new Error('Fehler beim Speichern der Stimme');
-        }
-
-        // 3. Speichere den Token in der Datenbank mit Ablaufzeit (1 Stunde)
+        // 2. Speichere den Token in der Datenbank mit Ablaufzeit (1 Stunde)
         const { error: tokenError } = await supabase
           .from('vote_confirmations')
           .insert({
@@ -181,7 +168,7 @@ function Gallery({ supabase }) {
           throw new Error('Fehler beim Speichern des Tokens');
         }
 
-        // 4. Sende die Bestätigungsmail über die Edge Function
+        // 3. Sende die Bestätigungsmail über die Edge Function
         try {
           const { data: emailData, error: emailError } =
             await supabase.functions.invoke('send-vote-confirmation', {
@@ -211,7 +198,7 @@ function Gallery({ supabase }) {
           throw emailFunctionError;
         }
 
-        // 5. Speichere die Email im localStorage für zukünftige Abstimmungen
+        // 4. Speichere die Email im localStorage für zukünftige Abstimmungen
         localStorage.setItem('voter_email', email);
 
         setConfirmationSent(true);
